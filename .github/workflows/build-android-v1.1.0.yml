@@ -39,7 +39,20 @@ jobs:
           test -f project/app/build.gradle
           test -f project/tools/verify_project.py
           grep -q '^android.useAndroidX=true$' project/gradle.properties || echo 'android.useAndroidX=true' >> project/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('project/app/build.gradle')
+          s = p.read_text()
+          if 'buildConfig true' not in s:
+              marker = '    compileOptions {'
+              block = '    buildFeatures {\n        buildConfig true\n    }\n\n'
+              if marker not in s:
+                  raise SystemExit('compileOptions marker not found')
+              s = s.replace(marker, block + marker, 1)
+              p.write_text(s)
+          PY
           grep '^android.useAndroidX=true$' project/gradle.properties
+          grep -A2 'buildFeatures' project/app/build.gradle
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

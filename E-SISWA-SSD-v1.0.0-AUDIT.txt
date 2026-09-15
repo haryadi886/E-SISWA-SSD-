@@ -1,0 +1,42 @@
+E-SISWA (SSD) Android v1.0.0 - SOURCE AUDIT
+Date: 2026-09-15
+Package: id.sch.smpn4dumai.esiswa
+WebView target: E-SISWA Apps Script production URL supplied by owner
+
+AUDIT SCOPE
+- Android manifest/resources XML
+- Java source compile-level check using local Android API stubs
+- Static project contract verification
+- Secret/API-key/password scan
+- WebView camera permission/origin restrictions
+- File chooser/import wiring
+- HTTP/HTTPS + blob/data download wiring
+- Cookie/session persistence
+- popup WebView/back-navigation/offline fallback
+- launcher icon and splash assets
+- GitHub Actions reproducible build workflow
+
+RESULTS
+- Project contract: PASS
+- XML parse: PASS (10/10)
+- Java compile-level audit: PASS
+- Secret scan: PASS
+- Hardcoded Gemini API key: NONE
+- Hardcoded password/session token: NONE
+- Camera permission restricted to trusted Apps Script origins: YES
+- Cleartext traffic disabled: YES
+- allowBackup disabled: YES
+- Android app name: E-SISWA (SSD)
+- App package: id.sch.smpn4dumai.esiswa
+- minSdk: 26
+- targetSdk/compileSdk: 36
+- AGP: 8.13.2
+- Gradle target: 8.13
+
+BUILD ENVIRONMENT LIMITATION
+The current execution container does not contain Android SDK, AAPT2, D8,
+APKSIGNER, or Gradle, and binary toolchain downloads are blocked in this
+container. Therefore no claim is made that an APK was locally assembled here.
+The source includes Android Studio/Gradle build instructions and a GitHub
+Actions workflow that installs the official Android toolchain and produces an
+installable debug APK.

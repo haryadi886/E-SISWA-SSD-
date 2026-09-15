@@ -1,0 +1,120 @@
+name: Build E-SISWA Android v1.1.1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-android-v1.1.1.yml'
+      - 'revision-assets/v1.1.1/**'
+      - 'source-binary/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reconstruct and patch v1.1.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5"
+          LOGO_SHA="2bdad684be125295f1cc59d45a8ba14d8bd7cd3522b279d94304e15a768ccad3"
+          LAUNCH_SHA="571e8d54ccb0f02f41d228d33cb65314dd7785f9dba56bb1f0834f32bb13353b"
+
+          rm -rf project source.zip
+          cat source-binary/part*.bin > source.zip
+          echo "$BASE_SHA  source.zip" | sha256sum -c -
+          mkdir project
+          unzip -q source.zip -d project
+
+          cd project
+          patch -p1 < ../revision-assets/v1.1.1/source.patch
+          grep -q '^android.useAndroidX=true$' gradle.properties || echo 'android.useAndroidX=true' >> gradle.properties
+
+          cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
+          cat ../revision-assets/v1.1.1/launch.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/launch_screen.jpg
+
+          echo "$LOGO_SHA  app/src/main/res/drawable-nodpi/esiswa_logo.webp" | sha256sum -c -
+          echo "$LAUNCH_SHA  app/src/main/res/drawable-nodpi/launch_screen.jpg" | sha256sum -c -
+          grep -q "versionName '1.1.1'" app/build.gradle
+          grep -q 'setLoadWithOverviewMode(true)' app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -q 'launchOverlay' app/src/main/res/layout/activity_main.xml
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+          "$SDKMANAGER" --list_installed | grep -E 'platforms;android-36|build-tools;35.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Verify source contract
+        working-directory: project
+        run: python3 tools/verify_project.py
+
+      - name: Build debug APK
+        working-directory: project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK exists and identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="project/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          file "$APK"
+          unzip -t "$APK" >/dev/null
+          sha256sum "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='3' versionName='1.1.1'"
+
+      - name: Package patched source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          zip -qr ../E-SISWA-SSD-Android-v1.1.1-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-SSD-Android-v1.1.1-SOURCE-CI.zip >/dev/null
+          sha256sum E-SISWA-SSD-Android-v1.1.1-SOURCE-CI.zip
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-SSD-v1.1.1-debug-apk
+          path: project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload v1.1.1 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-SSD-v1.1.1-source
+          path: E-SISWA-SSD-Android-v1.1.1-SOURCE-CI.zip
+          if-no-files-found: error
+          retention-days: 30

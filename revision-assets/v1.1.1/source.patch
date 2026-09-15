@@ -1,0 +1,181 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 2
+-        versionName '1.1.0'
++        versionCode 3
++        versionName '1.1.1'
+     }
+ 
+     buildTypes {
+@@ -24,6 +24,10 @@
+         }
+     }
+ 
++    buildFeatures {
++        buildConfig true
++    }
++
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+         targetCompatibility JavaVersion.VERSION_17
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -63,6 +63,7 @@
+ 
+     private WebView webView;
+     private ProgressBar progressBar;
++    private View launchOverlay;
+     private ValueCallback<Uri[]> filePathCallback;
+     private PermissionRequest pendingWebPermission;
+     private PendingDownload pendingDownload;
+@@ -79,6 +80,7 @@
+ 
+         progressBar = findViewById(R.id.progress);
+         webView = findViewById(R.id.webView);
++        launchOverlay = findViewById(R.id.launchOverlay);
+ 
+         CookieManager.getInstance().setAcceptCookie(true);
+         configureWebView(webView, false);
+@@ -95,6 +97,7 @@
+             }
+         } else {
+             webView.restoreState(savedInstanceState);
++            webView.postDelayed(this::hideLaunchOverlay, 160);
+         }
+     }
+ 
+@@ -105,7 +108,9 @@
+         settings.setDatabaseEnabled(true);
+         settings.setLoadsImagesAutomatically(true);
+         settings.setUseWideViewPort(true);
+-        settings.setLoadWithOverviewMode(false);
++        settings.setLoadWithOverviewMode(true);
++        settings.setTextZoom(100);
++        target.setInitialScale(0);
+         settings.setSupportZoom(true);
+         settings.setBuiltInZoomControls(false);
+         settings.setDisplayZoomControls(false);
+@@ -273,6 +278,29 @@
+         }
+     }
+ 
++
++    private void hideLaunchOverlay() {
++        if (launchOverlay == null || launchOverlay.getVisibility() != View.VISIBLE) return;
++        launchOverlay.animate()
++                .alpha(0f)
++                .setDuration(120)
++                .withEndAction(() -> {
++                    launchOverlay.setVisibility(View.GONE);
++                    launchOverlay.setAlpha(1f);
++                })
++                .start();
++    }
++
++    private void enforceResponsiveViewport(WebView view) {
++        if (view != webView) return;
++        final String js = "(function(){"
++                + "var m=document.querySelector('meta[name=\"viewport\"]');"
++                + "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}"
++                + "m.setAttribute('content','width=device-width, initial-scale=1.0, viewport-fit=cover');"
++                + "})();";
++        view.evaluateJavascript(js, null);
++    }
++
+     private class ESiswaWebViewClient extends WebViewClient {
+         @Override
+         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+@@ -291,6 +319,14 @@
+             }
+         }
+ 
++        @Override
++        public void onPageCommitVisible(WebView view, String url) {
++            if (view == webView) {
++                enforceResponsiveViewport(view);
++                hideLaunchOverlay();
++            }
++        }
++
+         @Override
+         public void onPageFinished(WebView view, String url) {
+             if (view == webView) {
+--- a/app/src/main/res/layout/activity_main.xml
++++ b/app/src/main/res/layout/activity_main.xml
+@@ -3,12 +3,31 @@
+     android:id="@+id/root"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+-    android:fitsSystemWindows="true">
++    android:fitsSystemWindows="true"
++    android:background="@color/white">
+ 
+     <WebView
+         android:id="@+id/webView"
+         android:layout_width="match_parent"
+-        android:layout_height="match_parent" />
++        android:layout_height="match_parent"
++        android:background="@color/white" />
++
++    <FrameLayout
++        android:id="@+id/launchOverlay"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:background="@color/white"
++        android:clickable="true"
++        android:focusable="true">
++
++        <ImageView
++            android:id="@+id/launchScreenImage"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent"
++            android:contentDescription="@string/app_name"
++            android:scaleType="fitCenter"
++            android:src="@drawable/launch_screen" />
++    </FrameLayout>
+ 
+     <ProgressBar
+         android:id="@+id/progress"
+--- a/app/src/main/res/drawable/splash_background.xml
++++ b/app/src/main/res/drawable/splash_background.xml
+@@ -1,6 +1,3 @@
+ <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+     <item android:drawable="@color/white" />
+-    <item android:gravity="center">
+-        <bitmap android:src="@drawable/esiswa_logo" android:gravity="center" />
+-    </item>
+ </layer-list>
+--- a/tools/verify_project.py
++++ b/tools/verify_project.py
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.0'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.1'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -28,6 +28,12 @@
+  ('ESISWAAndroidPush','native push bridge'),('configureFirebase','runtime Firebase config'),
+  ('esiswa-fcm-token','FCM token event'),('esiswa-native-push-open','push open event')]:
+     if needle not in main: errors.append(f'MISSING behavior {label}')
++
++for needle,label in [('setLoadWithOverviewMode(true)','responsive overview'),('setInitialScale(0)','auto scale'),('setTextZoom(100)','text zoom 100'),('onPageCommitVisible','fast launch commit'),('hideLaunchOverlay','launch overlay hide')]:
++    if needle not in main: errors.append(f'MISSING behavior {label}')
++need(Path('app/src/main/res/layout/activity_main.xml'), 'launchOverlay', 'fast launch overlay')
++if not (root/'app/src/main/res/drawable-nodpi/launch_screen.jpg').exists(): errors.append('MISSING launch_screen.jpg')
++
+ for needle,label in [('CHANNEL_ATTENDANCE','attendance channel'),('CHANNEL_COACHING','coaching channel'),('POST_NOTIFICATIONS','notification permission'),('PendingIntent.FLAG_IMMUTABLE','immutable pending intent')]:
+     if needle not in service: errors.append(f'MISSING {label}')
+ for needle,label in [('setProjectId','project id'),('setApplicationId','app id'),('setApiKey','api key'),('setGcmSenderId','sender id')]:
+@@ -45,4 +51,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.0 project contract satisfied')
++print('VERIFY PASS: E-SISWA Android v1.1.1 project contract satisfied')

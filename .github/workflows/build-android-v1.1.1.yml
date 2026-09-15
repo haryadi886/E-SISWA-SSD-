@@ -43,7 +43,10 @@ jobs:
           grep -q '^android.useAndroidX=true$' gradle.properties || echo 'android.useAndroidX=true' >> gradle.properties
 
           cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
-          tr -d '\n\r' < ../revision-assets/v1.1.1/launch-full.b64 | base64 -d > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          : > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          for part in ../revision-assets/v1.1.1/launch-bin.*.b64; do
+            tr -d '\n\r' < "$part" | base64 -d >> app/src/main/res/drawable-nodpi/launch_screen.jpg
+          done
 
           echo "$LOGO_SHA  app/src/main/res/drawable-nodpi/esiswa_logo.webp" | sha256sum -c -
           echo "$LAUNCH_SHA  app/src/main/res/drawable-nodpi/launch_screen.jpg" | sha256sum -c -

@@ -6,11 +6,10 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-android-v1.1.0.yml'
+      - 'source-binary/**'
       - 'build.gradle'
       - 'settings.gradle'
       - 'gradle.properties'
-      - 'app/**'
-      - 'tools/**'
 
 permissions:
   contents: read
@@ -21,37 +20,16 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout current repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Restore Android source package safely
+      - name: Reconstruct verified source ZIP
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE_COMMIT="f1f5ae9ef57a2d57181bec27ebfba1963b70c192"
           EXPECTED_SHA="1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5"
-
-          git fetch --no-tags --depth=1 origin "$SOURCE_COMMIT"
           rm -rf project source.zip
-          : > source.zip
-
-          for part in \
-            source.b64.part00 \
-            source.b64.part01 \
-            source.b64.part02 \
-            rest.b64.part00 \
-            rest.b64.part01 \
-            rest.b64.part02 \
-            rest.b64.part03 \
-            rest.b64.part04 \
-            rest.b64.part05
-          do
-            echo "Restoring $part"
-            git show "$SOURCE_COMMIT:source-parts/$part" | base64 --decode >> source.zip
-          done
-
+          cat source-binary/part*.bin > source.zip
           echo "$EXPECTED_SHA  source.zip" | sha256sum -c -
           mkdir project
           unzip -q source.zip -d project

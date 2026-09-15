@@ -21,7 +21,15 @@ jobs:
 
       - name: Reconstruct source package
         run: |
-          cat source-parts/source.b64.part* | base64 -d > source.zip
+          cat source-parts/source.b64.part00 \
+              source-parts/source.b64.part01 \
+              source-parts/source.b64.part02 \
+              source-parts/rest.b64.part00 \
+              source-parts/rest.b64.part01 \
+              source-parts/rest.b64.part02 \
+              source-parts/rest.b64.part03 \
+              source-parts/rest.b64.part04 \
+              source-parts/rest.b64.part05 | base64 -d > source.zip
           echo "1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5  source.zip" | sha256sum -c -
           mkdir project
           unzip -q source.zip -d project

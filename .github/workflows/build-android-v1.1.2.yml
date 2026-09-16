@@ -28,6 +28,24 @@ jobs:
         run: |
           set -euo pipefail
           EXPECTED_SHA="6bb9035a3185069cd5d1d31067ceb10d765f521d5211ac4c6f4989861677c456"
+
+          cat > chunk-sha256.txt <<'EOF'
+          e511cbf8f5e38869f7312459580360fd4b47777959d5451afdf29608b30945c8  source-v112/part00.b64
+          52659a872f0f2c4ac52f9ae6948314cc59d6260934e75f196cf1a2bb81af96d8  source-v112/part01.b64
+          885fb6c230064179ad4feceee1a09af84bc2f65d90d947bddee1473d84e6b7e2  source-v112/part02.b64
+          13d55d2e53f1dfb5444e67e23f179b96bacbaa62a9ae0631bceecda294473235  source-v112/part03-00.b64
+          0b884dbb49aba33aa431c0009d62113bb8942a8de0950df68573572dc66a9d52  source-v112/part03-01.b64
+          2726dec5d726d74376e6b82bcd78bbd681e1005f36b21c75c1f56b12d3739281  source-v112/part03-02.b64
+          3783575d3da8d23f1e7bdee42cd4fc16620d38889ff466a94fd6ebb19607d695  source-v112/part03-03.b64
+          0868fd54e4aeec7f0cc90c9199d7fe336202c6027f3cb755ad4774df51b6fda8  source-v112/part04.b64
+          435084846555272db31e088e5823366876eb302494f1b15839f6b8aaf28641c6  source-v112/part05-00.b64
+          5b4e1207adf91715f375b783fa635d51196ecf937c326f6af69b614786cfa73f  source-v112/part05-01.b64
+          34cba9040839f25a2c449f54d7861819fd63a00219d27d39170671ca36c8dbab  source-v112/part05-02.b64
+          da62d327117016d423e01211a29fbb870ee9efb6b099e4ef1b5f2df728653bec  source-v112/part05-03.b64
+          EOF
+          sed -i 's/^          //' chunk-sha256.txt
+          sha256sum -c chunk-sha256.txt
+
           rm -rf project source-v1.1.2.zip
           {
             cat source-v112/part00.b64

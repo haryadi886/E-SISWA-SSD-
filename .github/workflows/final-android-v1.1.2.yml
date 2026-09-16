@@ -1,0 +1,108 @@
+name: Final E-SISWA Android v1.1.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/final-android-v1.1.2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare v1.1.2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf project source.zip
+          cat source-binary/part*.bin > source.zip
+          echo '1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5  source.zip' | sha256sum -c -
+          mkdir project && unzip -q source.zip -d project
+          cd project
+          patch -p1 < ../revision-assets/v1.1.1/source.patch
+          grep -q '^android.useAndroidX=true$' gradle.properties || echo 'android.useAndroidX=true' >> gradle.properties
+          mkdir -p app/src/main/res/drawable-nodpi
+          cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
+          echo '2bdad684be125295f1cc59d45a8ba14d8bd7cd3522b279d94304e15a768ccad3  app/src/main/res/drawable-nodpi/esiswa_logo.webp' | sha256sum -c -
+          cat ../revision-assets/v1.1.2/launch.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          echo '571e8d54ccb0f02f41d228d33cb65314dd7785f9dba56bb1f0834f32bb13353b  app/src/main/res/drawable-nodpi/launch_screen.jpg' | sha256sum -c -
+
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path('app/build.gradle'); s=b.read_text(); s=s.replace('versionCode 3','versionCode 4',1).replace("versionName '1.1.1'","versionName '1.1.2'",1); b.write_text(s)
+          p=Path('app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java'); s=p.read_text()
+          s=s.replace('import android.app.Activity;\nimport android.app.Dialog;','import android.app.Activity;\nimport android.app.AlertDialog;\nimport android.app.Dialog;',1)
+          old='                || host.endsWith(".script.googleusercontent.com");'
+          assert s.count(old)==2
+          s=s.replace(old,'                || host.endsWith(".script.googleusercontent.com")\n                || host.endsWith("-script.googleusercontent.com");')
+          marker='    private void refreshFcmToken() {'
+          dialog='''    private void showPermissionSettingsDialog(String title, String message) {\n        if (isFinishing()) return;\n        new AlertDialog.Builder(this)\n                .setTitle(title)\n                .setMessage(message)\n                .setNegativeButton("Nanti", null)\n                .setPositiveButton("Buka Pengaturan", (dialog, which) -> {\n                    try {\n                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);\n                        intent.setData(Uri.parse("package:" + getPackageName()));\n                        startActivity(intent);\n                    } catch (Exception ignored) {\n                        toast("Pengaturan aplikasi tidak dapat dibuka.");\n                    }\n                })\n                .show();\n    }\n\n'''
+          assert marker in s; s=s.replace(marker,dialog+marker,1)
+          oldcam='''                } else {\n                    req.deny();\n                    toast("Izin kamera diperlukan untuk QR/Face Recognition.");\n                }\n'''
+          newcam='''                } else {\n                    req.deny();\n                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M\n                            && !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {\n                        showPermissionSettingsDialog("Izin Kamera Diperlukan", "Aktifkan izin Kamera untuk E-SISWA agar Scan QR, Face Recognition, foto profil guru, dan foto siswa dapat digunakan.");\n                    } else {\n                        toast("Izin kamera diperlukan. Tekan Coba Lagi lalu pilih Izinkan.");\n                    }\n                }\n'''
+          assert oldcam in s; s=s.replace(oldcam,newcam,1)
+          oldn='''        } else if (requestCode == REQ_NOTIFICATIONS) {\n            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {\n                toast("Notifikasi Android dinonaktifkan. Anda dapat mengaktifkannya dari Pengaturan aplikasi.");\n            } else {\n                refreshFcmToken();\n            }\n'''
+          newn='''        } else if (requestCode == REQ_NOTIFICATIONS) {\n            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {\n                if (Build.VERSION.SDK_INT >= 33\n                        && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {\n                    showPermissionSettingsDialog("Izin Notifikasi Diperlukan", "Aktifkan notifikasi E-SISWA agar pemberitahuan Pembinaan dan Absensi Masuk/Pulang dapat diterima di perangkat ini.");\n                } else {\n                    toast("Notifikasi belum diizinkan. Izin dapat diberikan saat diminta kembali.");\n                }\n            } else {\n                refreshFcmToken();\n            }\n'''
+          assert oldn in s; s=s.replace(oldn,newn,1); p.write_text(s)
+          v=Path('tools/verify_project.py'); t=v.read_text().replace("versionName '1.1.1'","versionName '1.1.2'").replace('v1.1.1 project contract satisfied','v1.1.2 project contract satisfied'); v.write_text(t)
+          Path('tools/test_v112_permissions.py').write_text('''from pathlib import Path\nimport sys\nr=Path(__file__).resolve().parents[1]; m=(r/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text(); mf=(r/'app/src/main/AndroidManifest.xml').read_text(); b=(r/'app/build.gradle').read_text()\nc={"version":"versionName \'1.1.2\'" in b and "versionCode 4" in b,"camera manifest":"android.permission.CAMERA" in mf,"notification manifest":"android.permission.POST_NOTIFICATIONS" in mf,"sandbox origin":"host.endsWith(\"-script.googleusercontent.com\")" in m,"notification request":"requestNotificationPermissionIfNeeded();" in m,"camera request":"requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA)" in m,"settings recovery":"Settings.ACTION_APPLICATION_DETAILS_SETTINGS" in m,"camera rationale":"shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)" in m,"notification rationale":"shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)" in m,"video-only":"request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE})" in m,"no microphone":"RESOURCE_AUDIO_CAPTURE" not in m}\n[print(("PASS" if v else "FAIL")+" - "+k) for k,v in c.items()]; f=[k for k,v in c.items() if not v]; print(f"PASS {len(c)-len(f)}/{len(c)} checks"); sys.exit(1 if f else 0)\n''')
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"; [ -x "$S" ] || S="$(command -v sdkmanager)"
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Permission regression tests
+        working-directory: project
+        run: python3 tools/test_v112_permissions.py
+
+      - name: Project contract
+        working-directory: project
+        run: python3 tools/verify_project.py
+
+      - name: Build APK
+        working-directory: project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Audit APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=project/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='4' versionName='1.1.2'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee apk-sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-SSD-v1.1.2-FINAL-APK
+          path: |
+            project/app/build/outputs/apk/debug/app-debug.apk
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 30

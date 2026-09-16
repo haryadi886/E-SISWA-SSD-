@@ -1,0 +1,317 @@
+diff --git a/app/build.gradle b/app/build.gradle
+index 66beb87..3409e01 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@ android {
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 6
+-        versionName '1.1.3.1'
++        versionCode 7
++        versionName '1.1.3.2'
+     }
+ 
+     buildTypes {
+@@ -36,6 +36,7 @@ android {
+ 
+ 
+ dependencies {
++    implementation 'androidx.webkit:webkit:1.17.0'
+     implementation platform('com.google.firebase:firebase-bom:34.19.0')
+     implementation 'com.google.firebase:firebase-messaging'
+ }
+diff --git a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+index 22c5dc6..258dd3d 100644
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -43,6 +43,11 @@ import android.webkit.WebViewClient;
+ import android.widget.ProgressBar;
+ import android.widget.Toast;
+ 
++import androidx.webkit.JavaScriptReplyProxy;
++import androidx.webkit.WebMessageCompat;
++import androidx.webkit.WebViewCompat;
++import androidx.webkit.WebViewFeature;
++
+ import org.json.JSONObject;
+ 
+ import com.google.firebase.messaging.FirebaseMessaging;
+@@ -75,7 +80,9 @@ public class MainActivity extends Activity {
+     private PendingDownload pendingDownload;
+     private final Map<WebView, Dialog> popupDialogs = new LinkedHashMap<>();
+     private final Map<WebView, Integer> popupBottomInsets = new LinkedHashMap<>();
++    private final Map<WebView, Boolean> modernPrintBridge = new LinkedHashMap<>();
+     private WebView pendingPrintWebView;
++    private JavaScriptReplyProxy pendingPrintReplyProxy;
+     private boolean pendingPrintLostFocus;
+     private String cachedFcmToken = "";
+     private String pendingPushKind = "";
+@@ -139,7 +146,7 @@ public class MainActivity extends Activity {
+         target.setWebViewClient(new ESiswaWebViewClient());
+         target.setWebChromeClient(new ESiswaChromeClient(target));
+         target.addJavascriptInterface(new DownloadBridge(this), "ESISWANative");
+-        target.addJavascriptInterface(new PrintBridge(target), "ESISWAPrint");
++        configureNativePrint(target);
+         if (!popup) target.addJavascriptInterface(new PushBridge(), "ESISWAAndroidPush");
+         target.setDownloadListener(new ESiswaDownloadListener(target));
+         target.setOverScrollMode(View.OVER_SCROLL_NEVER);
+@@ -382,8 +389,61 @@ public class MainActivity extends Activity {
+         popup.requestApplyInsets();
+     }
+ 
++    private java.util.Set<String> trustedPrintOrigins() {
++        return new java.util.LinkedHashSet<>(Arrays.asList(
++                "https://script.google.com",
++                "https://script.googleusercontent.com",
++                "https://*.script.googleusercontent.com",
++                "https://*.googleusercontent.com"
++        ));
++    }
++
++    private String nativePrintDocumentStartScript() {
++        return "(function(){"
++                + "if(window.__ESISWA_NATIVE_PRINT_V2_INSTALLED)return;"
++                + "if(!window.ESISWAPrintNative||typeof window.ESISWAPrintNative.postMessage!=='function')return;"
++                + "window.__ESISWA_NATIVE_PRINT_V2_INSTALLED=true;"
++                + "window.ESISWAPrintNative.onmessage=function(event){"
++                + "if(event&&event.data==='afterprint'){try{window.dispatchEvent(new Event('afterprint'));}catch(e){}}"
++                + "};"
++                + "window.print=function(){"
++                + "try{window.ESISWAPrintNative.postMessage(document.title||'E-SISWA');}catch(e){}"
++                + "};"
++                + "})();";
++    }
++
++    private void configureNativePrint(WebView target) {
++        if (target == null) return;
++        boolean modern = false;
++        try {
++            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
++                    && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
++                java.util.Set<String> origins = trustedPrintOrigins();
++                WebViewCompat.addWebMessageListener(
++                        target,
++                        "ESISWAPrintNative",
++                        origins,
++                        (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
++                            if (message == null || message.getType() != WebMessageCompat.TYPE_STRING) return;
++                            if (!isTrustedWebOrigin(sourceOrigin)) return;
++                            String title = message.getData();
++                            runOnUiThread(() -> startNativePrint(view, title, replyProxy));
++                        }
++                );
++                WebViewCompat.addDocumentStartJavaScript(target, nativePrintDocumentStartScript(), origins);
++                modern = true;
++            }
++        } catch (Exception ignored) {
++            modern = false;
++        }
++        modernPrintBridge.put(target, modern);
++        if (!modern) {
++            target.addJavascriptInterface(new PrintBridge(target), "ESISWAPrint");
++        }
++    }
++
+     private void installNativePrintBridge(WebView view) {
+-        if (view == null) return;
++        if (view == null || Boolean.TRUE.equals(modernPrintBridge.get(view))) return;
+         final String js = "(function(){"
+                 + "if(window.__ESISWA_NATIVE_PRINT_INSTALLED)return;"
+                 + "if(!window.ESISWAPrint||typeof window.ESISWAPrint.printPage!=='function')return;"
+@@ -393,12 +453,21 @@ public class MainActivity extends Activity {
+         view.evaluateJavascript(js, null);
+     }
+ 
+-    private void startNativePrint(WebView source, String requestedTitle) {
+-        if (source == null || isFinishing()) return;
++    private void startNativePrint(WebView source, String requestedTitle, JavaScriptReplyProxy replyProxy) {
++        if (source == null || isFinishing()) {
++            dispatchAfterPrint(source, replyProxy);
++            return;
++        }
++        if (pendingPrintWebView != null) {
++            toast("Dialog cetak masih terbuka.");
++            dispatchAfterPrint(source, replyProxy);
++            return;
++        }
+         try {
+             PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+             if (printManager == null) {
+                 toast("Layanan cetak Android tidak tersedia.");
++                dispatchAfterPrint(source, replyProxy);
+                 return;
+             }
+             String title = requestedTitle == null ? "" : requestedTitle.trim();
+@@ -407,16 +476,29 @@ public class MainActivity extends Activity {
+             String jobName = "E-SISWA - " + title;
+             PrintDocumentAdapter adapter = source.createPrintDocumentAdapter(jobName);
+             pendingPrintWebView = source;
++            pendingPrintReplyProxy = replyProxy;
+             pendingPrintLostFocus = false;
+             printManager.print(jobName, adapter, new PrintAttributes.Builder().build());
+         } catch (Exception ex) {
++            WebView failedView = pendingPrintWebView != null ? pendingPrintWebView : source;
++            JavaScriptReplyProxy failedProxy = pendingPrintReplyProxy != null ? pendingPrintReplyProxy : replyProxy;
+             pendingPrintWebView = null;
++            pendingPrintReplyProxy = null;
+             pendingPrintLostFocus = false;
+             toast("Mode cetak Android gagal dibuka.");
++            dispatchAfterPrint(failedView, failedProxy);
+         }
+     }
+ 
+-    private void dispatchAfterPrint(WebView printedView) {
++    private void dispatchAfterPrint(WebView printedView, JavaScriptReplyProxy replyProxy) {
++        if (replyProxy != null) {
++            try {
++                replyProxy.postMessage("afterprint");
++                return;
++            } catch (Exception ignored) {
++                // Fallback ke main-frame event untuk WebView lama / frame yang sudah berpindah.
++            }
++        }
+         if (printedView == null) return;
+         printedView.evaluateJavascript("(function(){try{window.dispatchEvent(new Event('afterprint'));}catch(e){}})();", null);
+     }
+@@ -427,7 +509,7 @@ public class MainActivity extends Activity {
+ 
+         @JavascriptInterface
+         public void printPage(String title) {
+-            runOnUiThread(() -> startNativePrint(source, title));
++            runOnUiThread(() -> startNativePrint(source, title, null));
+         }
+     }
+ 
+@@ -558,6 +640,7 @@ public class MainActivity extends Activity {
+             dialog.setOnDismissListener(d -> {
+                 popupDialogs.remove(popup);
+                 popupBottomInsets.remove(popup);
++                modernPrintBridge.remove(popup);
+                 popup.stopLoading();
+                 popup.removeJavascriptInterface("ESISWAPrint");
+                 popup.destroy();
+@@ -793,9 +876,11 @@ public class MainActivity extends Activity {
+         }
+         if (pendingPrintLostFocus) {
+             WebView printedView = pendingPrintWebView;
++            JavaScriptReplyProxy replyProxy = pendingPrintReplyProxy;
+             pendingPrintWebView = null;
++            pendingPrintReplyProxy = null;
+             pendingPrintLostFocus = false;
+-            printedView.postDelayed(() -> dispatchAfterPrint(printedView), 300);
++            printedView.postDelayed(() -> dispatchAfterPrint(printedView, replyProxy), 300);
+         }
+     }
+ 
+@@ -849,7 +934,9 @@ public class MainActivity extends Activity {
+         for (Dialog d : new ArrayList<>(popupDialogs.values())) d.dismiss();
+         popupDialogs.clear();
+         popupBottomInsets.clear();
++        modernPrintBridge.clear();
+         pendingPrintWebView = null;
++        pendingPrintReplyProxy = null;
+         pendingPrintLostFocus = false;
+         webView.stopLoading();
+         webView.removeJavascriptInterface("ESISWANative");
+diff --git a/tools/test_v112_permissions.py b/tools/test_v112_permissions.py
+index 065bcce..8b9012e 100644
+--- a/tools/test_v112_permissions.py
++++ b/tools/test_v112_permissions.py
+@@ -5,7 +5,7 @@ m=(r/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()
+ mf=(r/'app/src/main/AndroidManifest.xml').read_text()
+ b=(r/'app/build.gradle').read_text()
+ c={
+-"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b)),
++"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b) or ("versionName '1.1.3.2'" in b and 'versionCode 7' in b)),
+ "Camera manifest permission":'android.permission.CAMERA' in mf,
+ "Notification manifest permission":'android.permission.POST_NOTIFICATIONS' in mf,
+ "Apps Script sandbox origin":'host.endsWith("-script.googleusercontent.com")' in m,
+diff --git a/tools/test_v1131_camera_print.py b/tools/test_v1131_camera_print.py
+index e7aaa04..cfa8fad 100644
+--- a/tools/test_v1131_camera_print.py
++++ b/tools/test_v1131_camera_print.py
+@@ -6,7 +6,7 @@ main = (root / 'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').r
+ build = (root / 'app/build.gradle').read_text()
+ 
+ checks = {
+-    'Patch version 1.1.3.1 / code 6': "versionName '1.1.3.1'" in build and 'versionCode 6' in build,
++    'Camera patch lineage preserved': (("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build)),
+     'Android native print imports': 'android.print.PrintManager' in main and 'android.print.PrintDocumentAdapter' in main,
+     'Native print JavaScript bridge': '"ESISWAPrint"' in main and '@JavascriptInterface' in main and 'printPage' in main,
+     'Print adapter invocation': 'createPrintDocumentAdapter' in main and 'printManager.print' in main,
+diff --git a/tools/test_v1132_native_print_v2.py b/tools/test_v1132_native_print_v2.py
+new file mode 100644
+index 0000000..9e6cf38
+--- /dev/null
++++ b/tools/test_v1132_native_print_v2.py
+@@ -0,0 +1,37 @@
++from pathlib import Path
++import sys
++
++root = Path(__file__).resolve().parents[1]
++main = (root / 'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text(encoding='utf-8')
++build = (root / 'app/build.gradle').read_text(encoding='utf-8')
++manifest = (root / 'app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
++
++checks = {
++    'Version 1.1.3.2 / code 7': "versionName '1.1.3.2'" in build and 'versionCode 7' in build,
++    'Jetpack WebKit dependency present': "androidx.webkit:webkit:1.17.0" in build,
++    'Document-start injection APIs imported': 'androidx.webkit.WebViewCompat' in main and 'androidx.webkit.WebViewFeature' in main,
++    'Bidirectional reply proxy imported': 'androidx.webkit.JavaScriptReplyProxy' in main and 'androidx.webkit.WebMessageCompat' in main,
++    'Print bridge restricted to Apps Script origins': all(rule in main for rule in [
++        'https://script.google.com',
++        'https://script.googleusercontent.com',
++        'https://*.script.googleusercontent.com',
++        'https://*.googleusercontent.com',
++    ]),
++    'Web message listener registered for print': 'WebViewCompat.addWebMessageListener' in main and 'ESISWAPrintNative' in main,
++    'Document-start script reaches iframe print calls': 'WebViewCompat.addDocumentStartJavaScript' in main and 'window.print=function' in main.replace(' ', ''),
++    'Document-start script posts native print request': 'ESISWAPrintNative.postMessage' in main,
++    'Calling frame receives native print completion': 'ESISWAPrintNative.onmessage' in main and "dispatchEvent(new Event('afterprint'))" in main,
++    'Native callback keeps calling-frame reply proxy': 'JavaScriptReplyProxy' in main and 'replyProxy.postMessage' in main,
++    'Android PrintManager still drives output': 'createPrintDocumentAdapter' in main and 'printManager.print' in main,
++    'No Android print permission added': 'android.permission.PRINT' not in manifest,
++    'Camera safe-area patch retained': 'esiswa-native-camera-safe-area' in main and '--esiswa-native-nav-bottom' in main,
++    'Existing v1.1.3 responsive behavior retained': 'MOBILE_PAGE_SCALE = 0.88' in main and 'setTextZoom(96)' in main,
++}
++
++for name, ok in checks.items():
++    print(('PASS' if ok else 'FAIL') + ' - ' + name)
++failed = [name for name, ok in checks.items() if not ok]
++if failed:
++    print(f'FAIL {len(failed)}/{len(checks)} checks failed')
++    sys.exit(1)
++print(f'PASS {len(checks)}/{len(checks)} checks')
+diff --git a/tools/test_v113_ui.py b/tools/test_v113_ui.py
+index b391f52..c22dc4f 100644
+--- a/tools/test_v113_ui.py
++++ b/tools/test_v113_ui.py
+@@ -6,7 +6,7 @@ build=(root/'app/build.gradle').read_text()
+ fg=(root/'app/src/main/res/drawable/ic_launcher_foreground.xml').read_text()
+ icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
+ checks={
+-    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build),
++    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build),
+     'Mobile page scale constant': 'MOBILE_PAGE_SCALE = 0.88' in main,
+     'Responsive viewport scale injection': 'initial-scale=" + scale' in main and 'overflowX' in main,
+     'Viewport applied to popup too': 'if (view != webView) return;' not in main[main.find('private void enforceResponsiveViewport'):main.find('private class ESiswaWebViewClient')],
+diff --git a/tools/verify_project.py b/tools/verify_project.py
+index 322239f..a23a4c4 100644
+--- a/tools/verify_project.py
++++ b/tools/verify_project.py
+@@ -9,7 +9,7 @@ def need(path, text=None, label=None):
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.1'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.2'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -55,4 +55,4 @@ if errors:
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.3.1 project contract satisfied')
++print('VERIFY PASS: E-SISWA Android v1.1.3.2 project contract satisfied')

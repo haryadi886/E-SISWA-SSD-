@@ -44,7 +44,7 @@ jobs:
 
           cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
           : > app/src/main/res/drawable-nodpi/launch_screen.jpg
-          for part in ../revision-assets/v1.1.1/launch-bin.*.b64; do
+          for part in ../revision-assets/v1.1.1/launchfix/part*.b64; do
             tr -d '\n\r' < "$part" | base64 -d >> app/src/main/res/drawable-nodpi/launch_screen.jpg
           done
 

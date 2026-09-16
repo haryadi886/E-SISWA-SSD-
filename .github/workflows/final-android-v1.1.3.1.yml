@@ -89,8 +89,10 @@ jobs:
       - name: Package verified source
         shell: bash
         run: |
+          set -euo pipefail
+          find project -type d -name '__pycache__' -prune -exec rm -rf {} +
           cd project
-          zip -qr ../E-SISWA-SSD-Android-v1.1.3.1-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*' '__pycache__/*'
+          zip -qr ../E-SISWA-SSD-Android-v1.1.3.1-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*'
           cd ..
           unzip -t E-SISWA-SSD-Android-v1.1.3.1-SOURCE-CI.zip >/dev/null
           sha256sum E-SISWA-SSD-Android-v1.1.3.1-SOURCE-CI.zip | tee source-sha256.txt

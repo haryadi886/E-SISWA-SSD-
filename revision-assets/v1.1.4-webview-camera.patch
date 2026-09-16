@@ -1,0 +1,235 @@
+diff -ruN proj113/app/build.gradle proj114/app/build.gradle
+--- proj113/app/build.gradle	2026-09-16 04:47:48.000000000 +0000
++++ proj114/app/build.gradle	2026-09-16 05:31:12.397426106 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 5
+-        versionName '1.1.3'
++        versionCode 6
++        versionName '1.1.4'
+     }
+ 
+     buildTypes {
+diff -ruN proj113/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java proj114/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+--- proj113/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java	2026-09-16 04:47:48.000000000 +0000
++++ proj114/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java	2026-09-16 05:31:12.397126482 +0000
+@@ -37,6 +37,7 @@
+ import android.webkit.WebSettings;
+ import android.webkit.WebView;
+ import android.webkit.WebViewClient;
++import android.widget.FrameLayout;
+ import android.widget.ProgressBar;
+ import android.widget.Toast;
+ 
+@@ -62,7 +63,6 @@
+     private static final int REQ_WRITE_STORAGE = 1003;
+     private static final int REQ_NOTIFICATIONS = 1004;
+     private static final long MAX_BLOB_BYTES = 50L * 1024L * 1024L;
+-    private static final double MOBILE_PAGE_SCALE = 0.88;
+ 
+     private WebView webView;
+     private ProgressBar progressBar;
+@@ -112,7 +112,7 @@
+         settings.setLoadsImagesAutomatically(true);
+         settings.setUseWideViewPort(true);
+         settings.setLoadWithOverviewMode(true);
+-        settings.setTextZoom(96);
++        settings.setTextZoom(100);
+         target.setInitialScale(0);
+         settings.setSupportZoom(true);
+         settings.setBuiltInZoomControls(false);
+@@ -315,36 +315,58 @@
+     }
+ 
+     private void enforceResponsiveViewport(WebView view) {
+-        if (view == null) return;
+-        final String scale = String.format(Locale.US, "%.2f", MOBILE_PAGE_SCALE);
++        // Keep the production page behavior aligned with Chrome. Inject only once
++        // on the main WebView; repeated DOM/style mutation caused a v1.1.3
++        // regression while Apps Script callbacks were populating large tables.
++        if (view != webView) return;
+         final String js = "(function(){"
+                 + "var m=document.querySelector('meta[name=\"viewport\"]');"
+                 + "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}"
+-                + "m.setAttribute('content','width=device-width, initial-scale=" + scale + ", minimum-scale=0.75, maximum-scale=3.0, viewport-fit=cover');"
+-                + "var h=document.documentElement,b=document.body;"
+-                + "if(h){h.style.maxWidth='100%';h.style.overflowX='hidden';}"
+-                + "if(b){b.style.maxWidth='100%';b.style.overflowX='hidden';}"
++                + "m.setAttribute('content','width=device-width, initial-scale=1.0, viewport-fit=cover');"
+                 + "})();";
+         view.evaluateJavascript(js, null);
+     }
+ 
+-    private void applyPopupSystemInsets(WebView popup, Window window) {
+-        if (popup == null || window == null) return;
++    private int getNavigationBarHeightPx() {
++        int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
++        if (id > 0) return getResources().getDimensionPixelSize(id);
++        return Math.round(48f * getResources().getDisplayMetrics().density);
++    }
++
++    private void applyPopupSystemInsets(FrameLayout container, WebView popup, Window window) {
++        if (container == null || popup == null || window == null) return;
++        // Own the edge-to-edge layout explicitly, then shrink the actual WebView
++        // viewport with a bottom margin. CSS position:fixed footers therefore can
++        // never render underneath Android's navigation/gesture area.
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-            window.setDecorFitsSystemWindows(true);
++            window.setDecorFitsSystemWindows(false);
+         }
+-        popup.setOnApplyWindowInsetsListener((v, insets) -> {
++        final int fallbackBottom = getNavigationBarHeightPx();
++        container.setOnApplyWindowInsetsListener((v, insets) -> {
+             int bottom;
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                 bottom = insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+             } else {
+                 bottom = insets.getSystemWindowInsetBottom();
+             }
+-            popup.setPadding(popup.getPaddingLeft(), popup.getPaddingTop(),
+-                    popup.getPaddingRight(), Math.max(bottom, 0));
++            int safeBottom = Math.max(bottom, fallbackBottom);
++            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) popup.getLayoutParams();
++            if (lp.bottomMargin != safeBottom) {
++                lp.bottomMargin = safeBottom;
++                popup.setLayoutParams(lp);
++            }
+             return insets;
+         });
+-        popup.requestApplyInsets();
++        container.requestApplyInsets();
++        // Some vendor dialog windows report zero insets on their first frame.
++        // Reserve the platform navigation-bar height immediately as a fallback.
++        container.post(() -> {
++            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) popup.getLayoutParams();
++            if (lp.bottomMargin <= 0) {
++                lp.bottomMargin = fallbackBottom;
++                popup.setLayoutParams(lp);
++            }
++        });
+     }
+ 
+     private class ESiswaWebViewClient extends WebViewClient {
+@@ -367,13 +389,14 @@
+ 
+         @Override
+         public void onPageCommitVisible(WebView view, String url) {
+-            enforceResponsiveViewport(view);
+-            if (view == webView) hideLaunchOverlay();
++            if (view == webView) {
++                enforceResponsiveViewport(view);
++                hideLaunchOverlay();
++            }
+         }
+ 
+         @Override
+         public void onPageFinished(WebView view, String url) {
+-            enforceResponsiveViewport(view);
+             if (view == webView) {
+                 progressBar.setProgress(100);
+                 progressBar.setVisibility(View.GONE);
+@@ -459,9 +482,12 @@
+         public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+             if (!isUserGesture) return false;
+             Dialog dialog = new Dialog(MainActivity.this, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
++            FrameLayout popupContainer = new FrameLayout(MainActivity.this);
+             WebView popup = new WebView(MainActivity.this);
+             configureWebView(popup, true);
+-            dialog.setContentView(popup, new ViewGroup.LayoutParams(
++            popupContainer.addView(popup, new FrameLayout.LayoutParams(
++                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++            dialog.setContentView(popupContainer, new ViewGroup.LayoutParams(
+                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+             dialog.setOnDismissListener(d -> {
+                 popupDialogs.remove(popup);
+@@ -472,7 +498,7 @@
+             Window window = dialog.getWindow();
+             if (window != null) {
+                 window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+-                applyPopupSystemInsets(popup, window);
++                applyPopupSystemInsets(popupContainer, popup, window);
+             }
+             popupDialogs.put(popup, dialog);
+             WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+diff -ruN proj113/tools/test_v112_permissions.py proj114/tools/test_v112_permissions.py
+--- proj113/tools/test_v112_permissions.py	2026-09-16 04:47:48.000000000 +0000
++++ proj114/tools/test_v112_permissions.py	2026-09-16 05:31:12.397503347 +0000
+@@ -5,7 +5,7 @@
+ mf=(r/'app/src/main/AndroidManifest.xml').read_text()
+ b=(r/'app/build.gradle').read_text()
+ c={
+-"Version 1.1.3":"versionName '1.1.3'" in b and 'versionCode 5' in b,
++"Version 1.1.4":"versionName '1.1.4'" in b and 'versionCode 6' in b,
+ "Camera manifest permission":'android.permission.CAMERA' in mf,
+ "Notification manifest permission":'android.permission.POST_NOTIFICATIONS' in mf,
+ "Apps Script sandbox origin":'host.endsWith("-script.googleusercontent.com")' in m,
+diff -ruN proj113/tools/test_v114_webview_camera.py proj114/tools/test_v114_webview_camera.py
+--- proj113/tools/test_v114_webview_camera.py	1970-01-01 00:00:00.000000000 +0000
++++ proj114/tools/test_v114_webview_camera.py	2026-09-16 05:30:28.905957441 +0000
+@@ -0,0 +1,30 @@
++from pathlib import Path
++import sys
++
++root = Path(__file__).resolve().parents[1]
++main = (root / 'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()
++build = (root / 'app/build.gradle').read_text()
++
++client_block = main[main.find('private class ESiswaWebViewClient'):main.find('private class ESiswaChromeClient')]
++viewport_block = main[main.find('private void enforceResponsiveViewport'):main.find('private void applyPopupSystemInsets')]
++
++checks = {
++    'Version 1.1.4 / code 6': "versionName '1.1.4'" in build and 'versionCode 6' in build,
++    'Restore WebView text zoom 100': 'settings.setTextZoom(100);' in main,
++    'Main viewport no forced 0.88 scale': 'MOBILE_PAGE_SCALE' not in main and 'minimum-scale=0.75' not in main,
++    'Viewport limited to main WebView': 'if (view != webView) return;' in viewport_block,
++    'Viewport applied only once in lifecycle': client_block.count('enforceResponsiveViewport(view);') == 1,
++    'No viewport injection from onPageFinished': 'public void onPageFinished' in client_block and 'onPageFinished(WebView view, String url) {\n            enforceResponsiveViewport(view);' not in client_block,
++    'Popup uses dedicated inset container': 'FrameLayout popupContainer = new FrameLayout' in main,
++    'Popup reserves real bottom margin': 'lp.bottomMargin = safeBottom;' in main,
++    'Popup navigation inset reads navigationBars': 'WindowInsets.Type.navigationBars()' in main,
++    'Popup has navigation-height fallback': 'getNavigationBarHeightPx()' in main,
++}
++
++failed = []
++for name, ok in checks.items():
++    print(('PASS' if ok else 'FAIL') + ' - ' + name)
++    if not ok:
++        failed.append(name)
++print(f"PASS {len(checks)-len(failed)}/{len(checks)} checks")
++sys.exit(1 if failed else 0)
+diff -ruN proj113/tools/verify_project.py proj114/tools/verify_project.py
+--- proj113/tools/verify_project.py	2026-09-16 04:47:48.000000000 +0000
++++ proj114/tools/verify_project.py	2026-09-16 05:31:33.370426206 +0000
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.4'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -29,13 +29,13 @@
+  ('esiswa-fcm-token','FCM token event'),('esiswa-native-push-open','push open event')]:
+     if needle not in main: errors.append(f'MISSING behavior {label}')
+ 
+-for needle,label in [('setLoadWithOverviewMode(true)','responsive overview'),('setInitialScale(0)','auto initial scale'),('setTextZoom(96)','text zoom 96'),('onPageCommitVisible','fast launch commit'),('hideLaunchOverlay','launch overlay hide')]:
++for needle,label in [('setLoadWithOverviewMode(true)','responsive overview'),('setInitialScale(0)','auto initial scale'),('setTextZoom(100)','text zoom 100'),('onPageCommitVisible','fast launch commit'),('hideLaunchOverlay','launch overlay hide')]:
+     if needle not in main: errors.append(f'MISSING behavior {label}')
+ need(Path('app/src/main/res/layout/activity_main.xml'), 'launchOverlay', 'fast launch overlay')
+ if not (root/'app/src/main/res/drawable-nodpi/launch_screen.jpg').exists(): errors.append('MISSING launch_screen.jpg')
+ 
+ 
+-for needle,label in [('MOBILE_PAGE_SCALE = 0.88','mobile scale'),('setOnApplyWindowInsetsListener','popup system inset'),('WindowInsets.Type.navigationBars()','navigation bar inset')]:
++for needle,label in [('if (view != webView) return;','main-only viewport'),('setOnApplyWindowInsetsListener','popup system inset'),('WindowInsets.Type.navigationBars()','navigation bar inset'),('lp.bottomMargin = safeBottom;','popup bottom margin'),('getNavigationBarHeightPx()','navigation fallback')]:
+     if needle not in main: errors.append(f'MISSING behavior {label}')
+ 
+ for needle,label in [('CHANNEL_ATTENDANCE','attendance channel'),('CHANNEL_COACHING','coaching channel'),('POST_NOTIFICATIONS','notification permission'),('PendingIntent.FLAG_IMMUTABLE','immutable pending intent')]:
+@@ -55,4 +55,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.3 project contract satisfied')
++print('VERIFY PASS: E-SISWA Android v1.1.4 project contract satisfied')

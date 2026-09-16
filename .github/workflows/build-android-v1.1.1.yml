@@ -31,6 +31,16 @@ jobs:
           BASE_SHA="1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5"
           LOGO_SHA="2bdad684be125295f1cc59d45a8ba14d8bd7cd3522b279d94304e15a768ccad3"
           LAUNCH_SHA="571e8d54ccb0f02f41d228d33cb65314dd7785f9dba56bb1f0834f32bb13353b"
+          EXPECTED=(
+            3791e5d974c6b3204bc4dd682df5bd3eb97cf8f2b5eaca098aa94e843f8c0e07
+            a8c2a000435cd3c8daed0c927b2fa4e60c69447fb288fd4d7cd5c7303806ac0a
+            75669133c317f2da927ba323f276e1a382a0d4bd72670c7a28bf94110de82989
+            9c952f1efc148e4a60d2aedb99f7d7d1963c7af27947c7fb61469498db268e22
+            806dc6238ab4b33c756db2c0cd74c7274ca33e2217a138de660d597583675589
+            44a03e778ef0174a9fb08234988527044d5f4d92e679c4fbfe6eda442dab9df8
+            5952f251b19c23e8b5b958d59b94174046c3c962912e12889cfe4313c7d9d2ac
+            484bde0281b73049ae3c6aa118e4315f09d7553db48bee5c8a7c01cba72fa655
+          )
 
           rm -rf project source.zip
           cat source-binary/part*.bin > source.zip
@@ -44,9 +54,16 @@ jobs:
 
           cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
           : > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          i=0
           for part in ../revision-assets/v1.1.1/launchfix/part*.b64; do
-            tr -d '\n\r' < "$part" | base64 -d >> app/src/main/res/drawable-nodpi/launch_screen.jpg
+            tmp="/tmp/launch-part-$i.bin"
+            tr -d '\n\r' < "$part" | base64 -d > "$tmp"
+            wc -c "$tmp"
+            echo "${EXPECTED[$i]}  $tmp" | sha256sum -c -
+            cat "$tmp" >> app/src/main/res/drawable-nodpi/launch_screen.jpg
+            i=$((i+1))
           done
+          test "$i" -eq 8
 
           echo "$LOGO_SHA  app/src/main/res/drawable-nodpi/esiswa_logo.webp" | sha256sum -c -
           echo "$LAUNCH_SHA  app/src/main/res/drawable-nodpi/launch_screen.jpg" | sha256sum -c -

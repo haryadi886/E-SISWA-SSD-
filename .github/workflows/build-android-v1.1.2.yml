@@ -30,9 +30,19 @@ jobs:
           EXPECTED_SHA="6bb9035a3185069cd5d1d31067ceb10d765f521d5211ac4c6f4989861677c456"
 
           cat > chunk-sha256.txt <<'EOF'
-          e511cbf8f5e38869f7312459580360fd4b47777959d5451afdf29608b30945c8  source-v112/part00.b64
+          92970c47182e04053f02e47bf9d54c5f33cc240b85e41948a0c4e2cd0e7ff984  source-v112/part00-00.b64
+          f89f252660d52a3ecdd7c61f9a4f24309043826932fb0df5df7a60640dd16744  source-v112/part00-01.b64
+          b26a84703f457fe0fc1dbe17b38ba16e1f394c126d358208a36e4bc7a0e89f64  source-v112/part00-02.b64
+          53fc555706426c330068602275199c29f539aa0b7ade329fd648d27755ee1ec9  source-v112/part00-03.b64
+          47fbaac44249ab4ec16ea20f3950c52d775162b8d63f8588ea3a6721c030a4c7  source-v112/part00-04.b64
+          0eb8f57e17c1556b3c9c56a1372c119071601407feae71fe8ccb6bf7410bff0d  source-v112/part00-05.b64
           52659a872f0f2c4ac52f9ae6948314cc59d6260934e75f196cf1a2bb81af96d8  source-v112/part01.b64
-          885fb6c230064179ad4feceee1a09af84bc2f65d90d947bddee1473d84e6b7e2  source-v112/part02.b64
+          e429b9cfa526807e21b33f6f31d47f4e8345512d3eccf15e0bca4441c1b80dec  source-v112/part02-00.b64
+          c83358e73245fe1d18d5b7590fc6b772e36ce50cd32263cf981902619cb9e022  source-v112/part02-01.b64
+          12c8f28991ec0e296bb428dbf056ebc49d157ba64531725480298392414d5c3c  source-v112/part02-02.b64
+          58cd96cb6b352d02048a0a4c05275736508f8171090346d386907596fbb1e022  source-v112/part02-03.b64
+          b827ac68f8413793a0c5adf71fb724a0b1f2c4d47311228b28646256fc1f9b6b  source-v112/part02-04.b64
+          c55af998361463267e8f6666137ed48b2362029010a45b66ebd0c16b3d048c90  source-v112/part02-05.b64
           13d55d2e53f1dfb5444e67e23f179b96bacbaa62a9ae0631bceecda294473235  source-v112/part03-00.b64
           0b884dbb49aba33aa431c0009d62113bb8942a8de0950df68573572dc66a9d52  source-v112/part03-01.b64
           2726dec5d726d74376e6b82bcd78bbd681e1005f36b21c75c1f56b12d3739281  source-v112/part03-02.b64
@@ -48,18 +58,12 @@ jobs:
 
           rm -rf project source-v1.1.2.zip
           {
-            cat source-v112/part00.b64
+            cat source-v112/part00-*.b64
             cat source-v112/part01.b64
-            cat source-v112/part02.b64
-            cat source-v112/part03-00.b64
-            cat source-v112/part03-01.b64
-            cat source-v112/part03-02.b64
-            cat source-v112/part03-03.b64
+            cat source-v112/part02-*.b64
+            cat source-v112/part03-*.b64
             cat source-v112/part04.b64
-            cat source-v112/part05-00.b64
-            cat source-v112/part05-01.b64
-            cat source-v112/part05-02.b64
-            cat source-v112/part05-03.b64
+            cat source-v112/part05-*.b64
           } | tr -d '\n\r' | base64 -d > source-v1.1.2.zip
           echo "$EXPECTED_SHA  source-v1.1.2.zip" | sha256sum -c -
           unzip -t source-v1.1.2.zip >/dev/null

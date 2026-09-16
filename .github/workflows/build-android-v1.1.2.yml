@@ -6,7 +6,9 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/build-android-v1.1.2.yml'
-      - 'source-v112/**'
+      - 'source-binary/**'
+      - 'revision-assets/v1.1.1/**'
+      - 'revision-assets/v1.1.2/**'
 
 permissions:
   contents: read
@@ -23,55 +25,91 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct verified v1.1.2 source
+      - name: Reconstruct verified base and apply v1.1.2
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED_SHA="6bb9035a3185069cd5d1d31067ceb10d765f521d5211ac4c6f4989861677c456"
+          BASE_SHA="1ad52bdab2bca8a90d517e29978b2d1d2dce2c921985fd6fa2fff4d687b19ce5"
+          LOGO_SHA="2bdad684be125295f1cc59d45a8ba14d8bd7cd3522b279d94304e15a768ccad3"
+          LAUNCH_SHA="571e8d54ccb0f02f41d228d33cb65314dd7785f9dba56bb1f0834f32bb13353b"
 
-          cat > chunk-sha256.txt <<'EOF'
-          92970c47182e04053f02e47bf9d54c5f33cc240b85e41948a0c4e2cd0e7ff984  source-v112/part00-00.b64
-          f89f252660d52a3ecdd7c61f9a4f24309043826932fb0df5df7a60640dd16744  source-v112/part00-01.b64
-          b26a84703f457fe0fc1dbe17b38ba16e1f394c126d358208a36e4bc7a0e89f64  source-v112/part00-02.b64
-          53fc555706426c330068602275199c29f539aa0b7ade329fd648d27755ee1ec9  source-v112/part00-03.b64
-          47fbaac44249ab4ec16ea20f3950c52d775162b8d63f8588ea3a6721c030a4c7  source-v112/part00-04.b64
-          0eb8f57e17c1556b3c9c56a1372c119071601407feae71fe8ccb6bf7410bff0d  source-v112/part00-05.b64
-          52659a872f0f2c4ac52f9ae6948314cc59d6260934e75f196cf1a2bb81af96d8  source-v112/part01.b64
-          e429b9cfa526807e21b33f6f31d47f4e8345512d3eccf15e0bca4441c1b80dec  source-v112/part02-00.b64
-          c83358e73245fe1d18d5b7590fc6b772e36ce50cd32263cf981902619cb9e022  source-v112/part02-01.b64
-          12c8f28991ec0e296bb428dbf056ebc49d157ba64531725480298392414d5c3c  source-v112/part02-02.b64
-          58cd96cb6b352d02048a0a4c05275736508f8171090346d386907596fbb1e022  source-v112/part02-03.b64
-          b827ac68f8413793a0c5adf71fb724a0b1f2c4d47311228b28646256fc1f9b6b  source-v112/part02-04.b64
-          c55af998361463267e8f6666137ed48b2362029010a45b66ebd0c16b3d048c90  source-v112/part02-05.b64
-          13d55d2e53f1dfb5444e67e23f179b96bacbaa62a9ae0631bceecda294473235  source-v112/part03-00.b64
-          0b884dbb49aba33aa431c0009d62113bb8942a8de0950df68573572dc66a9d52  source-v112/part03-01.b64
-          2726dec5d726d74376e6b82bcd78bbd681e1005f36b21c75c1f56b12d3739281  source-v112/part03-02.b64
-          3783575d3da8d23f1e7bdee42cd4fc16620d38889ff466a94fd6ebb19607d695  source-v112/part03-03.b64
-          0868fd54e4aeec7f0cc90c9199d7fe336202c6027f3cb755ad4774df51b6fda8  source-v112/part04.b64
-          435084846555272db31e088e5823366876eb302494f1b15839f6b8aaf28641c6  source-v112/part05-00.b64
-          5b4e1207adf91715f375b783fa635d51196ecf937c326f6af69b614786cfa73f  source-v112/part05-01.b64
-          34cba9040839f25a2c449f54d7861819fd63a00219d27d39170671ca36c8dbab  source-v112/part05-02.b64
-          da62d327117016d423e01211a29fbb870ee9efb6b099e4ef1b5f2df728653bec  source-v112/part05-03.b64
-          EOF
-          sed -i 's/^          //' chunk-sha256.txt
-          sha256sum -c chunk-sha256.txt
-
-          rm -rf project source-v1.1.2.zip
-          {
-            cat source-v112/part00-*.b64
-            cat source-v112/part01.b64
-            cat source-v112/part02-*.b64
-            cat source-v112/part03-*.b64
-            cat source-v112/part04.b64
-            cat source-v112/part05-*.b64
-          } | tr -d '\n\r' | base64 -d > source-v1.1.2.zip
-          echo "$EXPECTED_SHA  source-v1.1.2.zip" | sha256sum -c -
-          unzip -t source-v1.1.2.zip >/dev/null
+          rm -rf project source.zip
+          cat source-binary/part*.bin > source.zip
+          echo "$BASE_SHA  source.zip" | sha256sum -c -
           mkdir project
-          unzip -q source-v1.1.2.zip -d project
-          test -f project/app/build.gradle
-          test -f project/tools/test_v112_permissions.py
-          test -f project/tools/verify_project.py
+          unzip -q source.zip -d project
+          cd project
+
+          patch -p1 < ../revision-assets/v1.1.1/source.patch
+          grep -q '^android.useAndroidX=true$' gradle.properties || echo 'android.useAndroidX=true' >> gradle.properties
+
+          mkdir -p app/src/main/res/drawable-nodpi
+          cat ../revision-assets/v1.1.1/logo.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/esiswa_logo.webp
+          echo "$LOGO_SHA  app/src/main/res/drawable-nodpi/esiswa_logo.webp" | sha256sum -c -
+
+          cat > ../launch-sha256.txt <<'EOF'
+          6585c1afd039f53a281ae8e02e6ff26fce5d4e8dbe1fc1bc823452d16422237d  revision-assets/v1.1.2/launch.00.b64
+          eb22f99f7b01165e7a5e4a216391effae4906b737a2dc8e7cddc9629352494bd  revision-assets/v1.1.2/launch.01.b64
+          b5770b316407ccab7fe10c63bbf3ab4f582d494af3c43b2a7316084b17eb4928  revision-assets/v1.1.2/launch.02.b64
+          564da5cdac269c535253a580a6159f73b7a5d515d3f2bfbc29fa17f4eca48296  revision-assets/v1.1.2/launch.03.b64
+          5ea8d2b4710f0ee76809f1f8881ac01ee0a5bb30b781457d0f19a8e6d75ffce8  revision-assets/v1.1.2/launch.04.b64
+          1b1abb1c280873dbc27be6b6562581946137438e4e3e45a1fd553d2ee17151de  revision-assets/v1.1.2/launch.05.b64
+          EOF
+          sed -i 's/^          //' ../launch-sha256.txt
+          cd ..
+          sha256sum -c launch-sha256.txt
+          cd project
+          cat ../revision-assets/v1.1.2/launch.*.b64 | tr -d '\n\r' | base64 -d > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          echo "$LAUNCH_SHA  app/src/main/res/drawable-nodpi/launch_screen.jpg" | sha256sum -c -
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          build = Path('app/build.gradle')
+          s = build.read_text()
+          assert "versionCode 3" in s and "versionName '1.1.1'" in s
+          s = s.replace('versionCode 3', 'versionCode 4', 1).replace("versionName '1.1.1'", "versionName '1.1.2'", 1)
+          build.write_text(s)
+
+          p = Path('app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
+          s = p.read_text()
+          old = 'import android.app.Activity;\nimport android.app.Dialog;'
+          assert old in s
+          s = s.replace(old, 'import android.app.Activity;\nimport android.app.AlertDialog;\nimport android.app.Dialog;', 1)
+
+          old_host = '                || host.endsWith(".script.googleusercontent.com");'
+          assert s.count(old_host) == 2, s.count(old_host)
+          s = s.replace(old_host, '                || host.endsWith(".script.googleusercontent.com")\n                || host.endsWith("-script.googleusercontent.com");')
+
+          marker = '    private void refreshFcmToken() {'
+          assert marker in s
+          dialog = '''    private void showPermissionSettingsDialog(String title, String message) {\n        if (isFinishing()) return;\n        new AlertDialog.Builder(this)\n                .setTitle(title)\n                .setMessage(message)\n                .setNegativeButton("Nanti", null)\n                .setPositiveButton("Buka Pengaturan", (dialog, which) -> {\n                    try {\n                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);\n                        intent.setData(Uri.parse("package:" + getPackageName()));\n                        startActivity(intent);\n                    } catch (Exception ignored) {\n                        toast("Pengaturan aplikasi tidak dapat dibuka.");\n                    }\n                })\n                .show();\n    }\n\n'''
+          s = s.replace(marker, dialog + marker, 1)
+
+          old_cam = '''                } else {\n                    req.deny();\n                    toast("Izin kamera diperlukan untuk QR/Face Recognition.");\n                }\n'''
+          new_cam = '''                } else {\n                    req.deny();\n                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M\n                            && !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {\n                        showPermissionSettingsDialog(\n                                "Izin Kamera Diperlukan",\n                                "Aktifkan izin Kamera untuk E-SISWA agar Scan QR, Face Recognition, foto profil guru, dan foto siswa dapat digunakan."\n                        );\n                    } else {\n                        toast("Izin kamera diperlukan. Tekan Coba Lagi lalu pilih Izinkan.");\n                    }\n                }\n'''
+          assert old_cam in s
+          s = s.replace(old_cam, new_cam, 1)
+
+          old_notif = '''        } else if (requestCode == REQ_NOTIFICATIONS) {\n            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {\n                toast("Notifikasi Android dinonaktifkan. Anda dapat mengaktifkannya dari Pengaturan aplikasi.");\n            } else {\n                refreshFcmToken();\n            }\n'''
+          new_notif = '''        } else if (requestCode == REQ_NOTIFICATIONS) {\n            if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {\n                if (Build.VERSION.SDK_INT >= 33\n                        && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {\n                    showPermissionSettingsDialog(\n                            "Izin Notifikasi Diperlukan",\n                            "Aktifkan notifikasi E-SISWA agar pemberitahuan Pembinaan dan Absensi Masuk/Pulang dapat diterima di perangkat ini."\n                    );\n                } else {\n                    toast("Notifikasi belum diizinkan. Izin dapat diberikan saat diminta kembali.");\n                }\n            } else {\n                refreshFcmToken();\n            }\n'''
+          assert old_notif in s
+          s = s.replace(old_notif, new_notif, 1)
+          p.write_text(s)
+
+          verify = Path('tools/verify_project.py')
+          v = verify.read_text()
+          v = v.replace("versionName '1.1.1'", "versionName '1.1.2'")
+          v = v.replace('v1.1.1 project contract satisfied', 'v1.1.2 project contract satisfied')
+          verify.write_text(v)
+
+          test = Path('tools/test_v112_permissions.py')
+          test.write_text('''from pathlib import Path\nimport sys\nroot=Path(__file__).resolve().parents[1]\nmain=(root/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()\nmanifest=(root/'app/src/main/AndroidManifest.xml').read_text()\nbuild=(root/'app/build.gradle').read_text()\nchecks={\n'Version 1.1.2': "versionName '1.1.2'" in build and 'versionCode 4' in build,\n'Camera manifest permission': 'android.permission.CAMERA' in manifest,\n'Notification manifest permission': 'android.permission.POST_NOTIFICATIONS' in manifest,\n'Apps Script sandbox origin': 'host.endsWith("-script.googleusercontent.com")' in main,\n'Notification runtime request': 'requestNotificationPermissionIfNeeded();' in main,\n'Camera runtime request': 'requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA)' in main,\n'Settings recovery': 'showPermissionSettingsDialog' in main and 'Settings.ACTION_APPLICATION_DETAILS_SETTINGS' in main,\n'Camera rationale handling': 'shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)' in main,\n'Notification rationale handling': 'shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)' in main,\n'Video-only WebView grant': 'request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE})' in main,\n'No microphone grant': 'RESOURCE_AUDIO_CAPTURE' not in main,\n}\nfor k,v in checks.items(): print(('PASS' if v else 'FAIL')+' - '+k)\nfailed=[k for k,v in checks.items() if not v]\nif failed: sys.exit(1)\nprint(f'PASS {len(checks)}/{len(checks)} checks')\n''')
+          PY
+
+          grep -q "versionName '1.1.2'" app/build.gradle
+          grep -q 'host.endsWith("-script.googleusercontent.com")' app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -q 'showPermissionSettingsDialog' app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -84,38 +122,22 @@ jobs:
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(command -v sdkmanager)"
-          fi
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;35.0.0"
-          "$SDKMANAGER" --list_installed | grep -E 'platforms;android-36|build-tools;35.0.0'
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Run v1.1.2 permission regression tests
+      - name: Run permission regression tests
         working-directory: project
         run: python3 tools/test_v112_permissions.py
 
       - name: Verify project contract
         working-directory: project
         run: python3 tools/verify_project.py
-
-      - name: Verify camera bridge security contract
-        working-directory: project
-        shell: bash
-        run: |
-          set -euo pipefail
-          MAIN="app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java"
-          grep -q -- '-script.googleusercontent.com' "$MAIN"
-          grep -q 'RESOURCE_VIDEO_CAPTURE' "$MAIN"
-          ! grep -q 'RESOURCE_AUDIO_CAPTURE' "$MAIN"
-          grep -q 'ACTION_APPLICATION_DETAILS_SETTINGS' "$MAIN"
-          grep -q 'shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)' "$MAIN"
-          grep -q 'shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)' "$MAIN"
 
       - name: Build debug APK
         working-directory: project
@@ -135,6 +157,15 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           sha256sum "$APK" | tee apk-sha256.txt
 
+      - name: Package verified source
+        shell: bash
+        run: |
+          cd project
+          zip -qr ../E-SISWA-SSD-Android-v1.1.2-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-SSD-Android-v1.1.2-SOURCE-CI.zip >/dev/null
+          sha256sum E-SISWA-SSD-Android-v1.1.2-SOURCE-CI.zip | tee source-sha256.txt
+
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
@@ -149,6 +180,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: E-SISWA-SSD-v1.1.2-source
-          path: source-v1.1.2.zip
+          path: |
+            E-SISWA-SSD-Android-v1.1.2-SOURCE-CI.zip
+            source-sha256.txt
           if-no-files-found: error
           retention-days: 30

@@ -1,0 +1,288 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 5
+-        versionName '1.1.3'
++        versionCode 6
++        versionName '1.1.3.1'
+     }
+ 
+     buildTypes {
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -20,6 +20,9 @@
+ import android.os.Message;
+ import android.provider.MediaStore;
+ import android.provider.Settings;
++import android.print.PrintAttributes;
++import android.print.PrintDocumentAdapter;
++import android.print.PrintManager;
+ import android.view.View;
+ import android.view.ViewGroup;
+ import android.view.Window;
+@@ -71,6 +74,9 @@
+     private PermissionRequest pendingWebPermission;
+     private PendingDownload pendingDownload;
+     private final Map<WebView, Dialog> popupDialogs = new LinkedHashMap<>();
++    private final Map<WebView, Integer> popupBottomInsets = new LinkedHashMap<>();
++    private WebView pendingPrintWebView;
++    private boolean pendingPrintLostFocus;
+     private String cachedFcmToken = "";
+     private String pendingPushKind = "";
+     private String pendingPushView = "";
+@@ -133,6 +139,7 @@
+         target.setWebViewClient(new ESiswaWebViewClient());
+         target.setWebChromeClient(new ESiswaChromeClient(target));
+         target.addJavascriptInterface(new DownloadBridge(this), "ESISWANative");
++        target.addJavascriptInterface(new PrintBridge(target), "ESISWAPrint");
+         if (!popup) target.addJavascriptInterface(new PushBridge(), "ESISWAAndroidPush");
+         target.setDownloadListener(new ESiswaDownloadListener(target));
+         target.setOverScrollMode(View.OVER_SCROLL_NEVER);
+@@ -328,6 +335,32 @@
+         view.evaluateJavascript(js, null);
+     }
+ 
++    private int resolveNavigationBarHeight() {
++        int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
++        return id > 0 ? Math.max(getResources().getDimensionPixelSize(id), 0) : 0;
++    }
++
++    private void applyCameraPopupSafeArea(WebView popup, int bottomInset) {
++        if (popup == null) return;
++        int safeBottom = Math.max(Math.max(bottomInset, 0), resolveNavigationBarHeight());
++        final String js = "(function(){"
++                + "var b=document.getElementById('btns'),v=document.getElementById('video');"
++                + "if(!b||!v||!document.body)return;"
++                + "var t=(document.body.innerText||'').toUpperCase();if(t.indexOf('KAMERA')<0)return;"
++                + "document.documentElement.style.setProperty('--esiswa-native-nav-bottom','" + safeBottom + "px');"
++                + "var s=document.getElementById('esiswa-native-camera-safe-area');"
++                + "if(!s){s=document.createElement('style');s.id='esiswa-native-camera-safe-area';document.head.appendChild(s);}"
++                + "s.textContent='@media screen and (max-width:700px), screen and (max-height:1000px){'"
++                + "+'html,body{height:auto!important;min-height:100dvh!important;overflow-y:auto!important;}'"
++                + "+'body{padding-bottom:calc(var(--esiswa-native-nav-bottom,0px) + 24px)!important;scroll-padding-bottom:calc(var(--esiswa-native-nav-bottom,0px) + 24px)!important;}'"
++                + "+'#video,video{max-height:calc(100dvh - 360px - var(--esiswa-native-nav-bottom,0px))!important;min-height:220px!important;height:auto!important;object-fit:cover!important;}'"
++                + "+'#videoWrap{max-height:calc(100dvh - 360px - var(--esiswa-native-nav-bottom,0px))!important;overflow:hidden!important;border-radius:14px!important;}'"
++                + "+'#btns,.btns{position:relative!important;z-index:5!important;flex-shrink:0!important;margin-bottom:calc(var(--esiswa-native-nav-bottom,0px) + 18px)!important;}'"
++                + "+'}';"
++                + "})();";
++        popup.evaluateJavascript(js, null);
++    }
++
+     private void applyPopupSystemInsets(WebView popup, Window window) {
+         if (popup == null || window == null) return;
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+@@ -340,13 +373,64 @@
+             } else {
+                 bottom = insets.getSystemWindowInsetBottom();
+             }
+-            popup.setPadding(popup.getPaddingLeft(), popup.getPaddingTop(),
+-                    popup.getPaddingRight(), Math.max(bottom, 0));
++            int safeBottom = Math.max(Math.max(bottom, 0), resolveNavigationBarHeight());
++            popupBottomInsets.put(popup, safeBottom);
++            applyCameraPopupSafeArea(popup, safeBottom);
+             return insets;
+         });
++        popupBottomInsets.put(popup, resolveNavigationBarHeight());
+         popup.requestApplyInsets();
+     }
+ 
++    private void installNativePrintBridge(WebView view) {
++        if (view == null) return;
++        final String js = "(function(){"
++                + "if(window.__ESISWA_NATIVE_PRINT_INSTALLED)return;"
++                + "if(!window.ESISWAPrint||typeof window.ESISWAPrint.printPage!=='function')return;"
++                + "window.__ESISWA_NATIVE_PRINT_INSTALLED=true;"
++                + "window.print=function(){try{window.ESISWAPrint.printPage(document.title||'E-SISWA');}catch(e){}};"
++                + "})();";
++        view.evaluateJavascript(js, null);
++    }
++
++    private void startNativePrint(WebView source, String requestedTitle) {
++        if (source == null || isFinishing()) return;
++        try {
++            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
++            if (printManager == null) {
++                toast("Layanan cetak Android tidak tersedia.");
++                return;
++            }
++            String title = requestedTitle == null ? "" : requestedTitle.trim();
++            if (title.isEmpty()) title = "E-SISWA";
++            title = title.length() > 80 ? title.substring(0, 80) : title;
++            String jobName = "E-SISWA - " + title;
++            PrintDocumentAdapter adapter = source.createPrintDocumentAdapter(jobName);
++            pendingPrintWebView = source;
++            pendingPrintLostFocus = false;
++            printManager.print(jobName, adapter, new PrintAttributes.Builder().build());
++        } catch (Exception ex) {
++            pendingPrintWebView = null;
++            pendingPrintLostFocus = false;
++            toast("Mode cetak Android gagal dibuka.");
++        }
++    }
++
++    private void dispatchAfterPrint(WebView printedView) {
++        if (printedView == null) return;
++        printedView.evaluateJavascript("(function(){try{window.dispatchEvent(new Event('afterprint'));}catch(e){}})();", null);
++    }
++
++    private final class PrintBridge {
++        private final WebView source;
++        PrintBridge(WebView source) { this.source = source; }
++
++        @JavascriptInterface
++        public void printPage(String title) {
++            runOnUiThread(() -> startNativePrint(source, title));
++        }
++    }
++
+     private class ESiswaWebViewClient extends WebViewClient {
+         @Override
+         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+@@ -368,12 +452,20 @@
+         @Override
+         public void onPageCommitVisible(WebView view, String url) {
+             enforceResponsiveViewport(view);
++            installNativePrintBridge(view);
++            if (view != webView) {
++                applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));
++            }
+             if (view == webView) hideLaunchOverlay();
+         }
+ 
+         @Override
+         public void onPageFinished(WebView view, String url) {
+             enforceResponsiveViewport(view);
++            installNativePrintBridge(view);
++            if (view != webView) {
++                applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));
++            }
+             if (view == webView) {
+                 progressBar.setProgress(100);
+                 progressBar.setVisibility(View.GONE);
+@@ -465,7 +557,9 @@
+                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+             dialog.setOnDismissListener(d -> {
+                 popupDialogs.remove(popup);
++                popupBottomInsets.remove(popup);
+                 popup.stopLoading();
++                popup.removeJavascriptInterface("ESISWAPrint");
+                 popup.destroy();
+             });
+             dialog.show();
+@@ -690,6 +784,22 @@
+     }
+ 
+     @Override
++    public void onWindowFocusChanged(boolean hasFocus) {
++        super.onWindowFocusChanged(hasFocus);
++        if (pendingPrintWebView == null) return;
++        if (!hasFocus) {
++            pendingPrintLostFocus = true;
++            return;
++        }
++        if (pendingPrintLostFocus) {
++            WebView printedView = pendingPrintWebView;
++            pendingPrintWebView = null;
++            pendingPrintLostFocus = false;
++            printedView.postDelayed(() -> dispatchAfterPrint(printedView), 300);
++        }
++    }
++
++    @Override
+     protected void onSaveInstanceState(Bundle outState) {
+         webView.saveState(outState);
+         super.onSaveInstanceState(outState);
+@@ -738,8 +848,12 @@
+         if (pendingWebPermission != null) pendingWebPermission.deny();
+         for (Dialog d : new ArrayList<>(popupDialogs.values())) d.dismiss();
+         popupDialogs.clear();
++        popupBottomInsets.clear();
++        pendingPrintWebView = null;
++        pendingPrintLostFocus = false;
+         webView.stopLoading();
+         webView.removeJavascriptInterface("ESISWANative");
++        webView.removeJavascriptInterface("ESISWAPrint");
+         webView.removeJavascriptInterface("ESISWAAndroidPush");
+         webView.destroy();
+         super.onDestroy();
+--- a/tools/test_v112_permissions.py
++++ b/tools/test_v112_permissions.py
+@@ -5,7 +5,7 @@
+ mf=(r/'app/src/main/AndroidManifest.xml').read_text()
+ b=(r/'app/build.gradle').read_text()
+ c={
+-"Version 1.1.3":"versionName '1.1.3'" in b and 'versionCode 5' in b,
++"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b)),
+ "Camera manifest permission":'android.permission.CAMERA' in mf,
+ "Notification manifest permission":'android.permission.POST_NOTIFICATIONS' in mf,
+ "Apps Script sandbox origin":'host.endsWith("-script.googleusercontent.com")' in m,
+--- a/tools/test_v113_ui.py
++++ b/tools/test_v113_ui.py
+@@ -6,12 +6,12 @@
+ fg=(root/'app/src/main/res/drawable/ic_launcher_foreground.xml').read_text()
+ icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
+ checks={
+-    'Version 1.1.3': "versionName '1.1.3'" in build and 'versionCode 5' in build,
++    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build),
+     'Mobile page scale constant': 'MOBILE_PAGE_SCALE = 0.88' in main,
+     'Responsive viewport scale injection': 'initial-scale=" + scale' in main and 'overflowX' in main,
+     'Viewport applied to popup too': 'if (view != webView) return;' not in main[main.find('private void enforceResponsiveViewport'):main.find('private class ESiswaWebViewClient')],
+     'Popup navigation inset listener': 'setOnApplyWindowInsetsListener' in main and 'WindowInsets.Type.navigationBars()' in main,
+-    'Popup bottom safe padding': 'popup.setPadding' in main,
++    'Popup bottom safe area': ('popup.setPadding' in main) or ('esiswa-native-camera-safe-area' in main and '--esiswa-native-nav-bottom' in main),
+     'Launcher has safe inset': 'android:insetLeft="18dp"' in fg and 'android:insetTop="18dp"' in fg,
+     'No Google banner DOM hack': 'Laporkan penyalahgunaan' not in main and 'Pelajari lebih lanjut' not in main,
+ }
+--- a/tools/verify_project.py
++++ b/tools/verify_project.py
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.1'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -55,4 +55,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.3 project contract satisfied')
++print('VERIFY PASS: E-SISWA Android v1.1.3.1 project contract satisfied')
+--- /dev/null
++++ b/tools/test_v1131_camera_print.py
+@@ -0,0 +1,30 @@
++from pathlib import Path
++import sys
++
++root = Path(__file__).resolve().parents[1]
++main = (root / 'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()
++build = (root / 'app/build.gradle').read_text()
++
++checks = {
++    'Patch version 1.1.3.1 / code 6': "versionName '1.1.3.1'" in build and 'versionCode 6' in build,
++    'Android native print imports': 'android.print.PrintManager' in main and 'android.print.PrintDocumentAdapter' in main,
++    'Native print JavaScript bridge': '"ESISWAPrint"' in main and '@JavascriptInterface' in main and 'printPage' in main,
++    'Print adapter invocation': 'createPrintDocumentAdapter' in main and 'printManager.print' in main,
++    'window.print override injection': '__ESISWA_NATIVE_PRINT_INSTALLED' in main and 'window.print=function' in main.replace(' ', ''),
++    'afterprint cleanup after native dialog': "dispatchEvent(new Event('afterprint'))" in main or 'dispatchAfterPrint' in main,
++    'Camera popup CSS safe-area injection': 'esiswa-native-camera-safe-area' in main,
++    'Camera buttons protected from navigation': '--esiswa-native-nav-bottom' in main and '#btns' in main and 'margin-bottom' in main,
++    'Camera portrait preview height capped': '100dvh' in main and '#videoWrap' in main and 'max-height' in main,
++    'Navigation bar fallback when inset is zero': 'navigation_bar_height' in main,
++    'v1.1.3 responsive behavior preserved': 'MOBILE_PAGE_SCALE = 0.88' in main and 'setTextZoom(96)' in main and 'enforceResponsiveViewport(view)' in main,
++    'v1.1.2 permission behavior preserved': 'PermissionRequest.RESOURCE_VIDEO_CAPTURE' in main and 'Manifest.permission.CAMERA' in main,
++}
++
++for name, ok in checks.items():
++    print(('PASS' if ok else 'FAIL') + ' - ' + name)
++
++failed = [name for name, ok in checks.items() if not ok]
++if failed:
++    print(f'FAIL {len(failed)}/{len(checks)} checks failed')
++    sys.exit(1)
++print(f'PASS {len(checks)}/{len(checks)} checks')

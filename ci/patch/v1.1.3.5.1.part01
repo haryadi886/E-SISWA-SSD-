@@ -1,0 +1,6 @@
+ent':splash.exists() and splash.stat().st_size>10000,
++}
++failed=[k for k,v in checks.items() if not v]
++for k,v in checks.items(): print(('PASS' if v else 'FAIL')+': '+k)
++if failed: raise SystemExit('branding regression failed: '+', '.join(failed))
++print('Branding regression PASS %d/%d' % (len(checks),len(checks)))

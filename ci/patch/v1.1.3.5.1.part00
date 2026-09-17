@@ -1,0 +1,220 @@
+--- a/BUILDING.md
++++ b/BUILDING.md
+@@ -1,4 +1,4 @@
+-# Cara Build E-SISWA (SSD) Android v1.1.3.5
++# Cara Build (SSD) SMPN4D Android v1.1.3.5.1
+ 
+ ## Android Studio
+ 
+--- a/README.md
++++ b/README.md
+@@ -1,12 +1,12 @@
+-# E-SISWA (SSD) Android v1.1.3.5
++# (SSD) SMPN4D Android v1.1.3.5.1
+ 
+ Android WebView wrapper untuk **E-SISWA (Sistem Siswa Digital) – SMP Negeri 4 Kota Dumai** dengan **Native Push Notification**.
+ 
+ ## Identitas aplikasi
+ 
+-- Nama: **E-SISWA (SSD)**
++- Nama launcher: **(SSD) SMPN4D**
+ - Application ID: `id.sch.smpn4dumai.esiswa`
+-- Version: `1.1.3.5` (versionCode 10)
++- Version: `1.1.3.5.1` (versionCode 11)
+ - Min Android: API 26 / Android 8.0
+ - Target/Compile: API 36 / Android 16
+ - Web App: deployment E-SISWA Google Apps Script produksi milik sekolah.
+@@ -17,7 +17,7 @@
+ - Kamera QR dan Face Recognition melalui `getUserMedia` dengan permission Android.
+ - Import/upload file, download HTTP/HTTPS dan `blob:`/`data:`.
+ - Popup WebView, tombol Back Android, loading dan halaman offline.
+-- Launcher icon + splash memakai logo E-SISWA (SSD).
++- Launcher icon memakai logo SSD baru dan splash memakai tampilan (SSD) SMPN4D.
+ - **Firebase Cloud Messaging (FCM) native push** untuk:
+   - Pembinaan Siswa.
+   - Absensi Masuk.
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 10
+-        versionName '1.1.3.5'
++        versionCode 11
++        versionName '1.1.3.5.1'
+     }
+ 
+     buildTypes {
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -707,7 +707,7 @@
+                 + "var raw=(b.textContent||'').trim();var n=parseInt(raw,10);if(!isFinite(n))n=0;"
+                 + "if((b.classList&&b.classList.contains('hidden'))||n<0)n=0;"
+                 + "if(n===last)return;last=n;"
+-                + "var payload={notifyCount:n,title:'E-SISWA (SSD)',body:n>0?('Ada '+n+' notifikasi Pembinaan baru.'):'',kind:'pembinaan_new',view:'pembinaan'};"
++                + "var payload={notifyCount:n,title:'(SSD) SMPN4D',body:n>0?('Ada '+n+' notifikasi Pembinaan baru.'):'',kind:'pembinaan_new',view:'pembinaan'};"
+                 + "try{window.ESISWANotifyNative.postMessage(JSON.stringify(payload));}catch(e){}"
+                 + "}"
+                 + "function boot(){if(!document.documentElement){setTimeout(boot,50);return;}"
+@@ -752,7 +752,7 @@
+             }
+             if (count > previous) {
+                 showMirroredWebNotification(
+-                        obj.optString("title", "E-SISWA (SSD)"),
++                        obj.optString("title", "(SSD) SMPN4D"),
+                         obj.optString("body", "Ada notifikasi Pembinaan baru."),
+                         obj.optString("kind", "pembinaan_new"),
+                         obj.optString("view", "pembinaan"),
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
+@@ -33,8 +33,8 @@
+     public void onMessageReceived(RemoteMessage message) {
+         super.onMessageReceived(message);
+         Map<String, String> data = message.getData();
+-        String title = safe(data.get("title"), "E-SISWA (SSD)");
+-        String body = safe(data.get("body"), "Ada notifikasi baru dari E-SISWA.");
++        String title = safe(data.get("title"), "(SSD) SMPN4D");
++        String body = safe(data.get("body"), "Ada notifikasi baru dari (SSD) SMPN4D.");
+         String kind = safe(data.get("kind"), "general");
+         String view = safe(data.get("view"), "dashboard");
+         showLocalNotification(this, title, body, kind, view, message.getMessageId());
+@@ -62,9 +62,9 @@
+         String channelId = channelFor(kind);
+         Notification notification = new Notification.Builder(context, channelId)
+                 .setSmallIcon(R.drawable.ic_stat_notification)
+-                .setContentTitle(safe(title, "E-SISWA (SSD)"))
+-                .setContentText(safe(body, "Ada notifikasi baru dari E-SISWA."))
+-                .setStyle(new Notification.BigTextStyle().bigText(safe(body, "Ada notifikasi baru dari E-SISWA.")))
++                .setContentTitle(safe(title, "(SSD) SMPN4D"))
++                .setContentText(safe(body, "Ada notifikasi baru dari (SSD) SMPN4D."))
++                .setStyle(new Notification.BigTextStyle().bigText(safe(body, "Ada notifikasi baru dari (SSD) SMPN4D.")))
+                 .setAutoCancel(true)
+                 .setShowWhen(true)
+                 .setContentIntent(contentIntent)
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,7 +1,7 @@
+ <resources>
+-    <string name="app_name">E-SISWA (SSD)</string>
++    <string name="app_name">(SSD) SMPN4D</string>
+     <string name="offline_title">Tidak ada koneksi internet</string>
+     <string name="notification_channel_attendance">Absensi Siswa</string>
+     <string name="notification_channel_coaching">Pembinaan Siswa</string>
+-    <string name="notification_channel_general">Notifikasi E-SISWA</string>
++    <string name="notification_channel_general">Notifikasi (SSD) SMPN4D</string>
+ </resources>
+--- a/tools/test_v112_permissions.py
++++ b/tools/test_v112_permissions.py
+@@ -5,7 +5,7 @@
+ mf=(r/'app/src/main/AndroidManifest.xml').read_text()
+ b=(r/'app/build.gradle').read_text()
+ c={
+-"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b) or ("versionName '1.1.3.2'" in b and 'versionCode 7' in b) or ("versionName '1.1.3.3'" in b and 'versionCode 8' in b) or ("versionName '1.1.3.4'" in b and 'versionCode 9' in b) or ("versionName '1.1.3.5'" in b and 'versionCode 10' in b)),
++"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b) or ("versionName '1.1.3.2'" in b and 'versionCode 7' in b) or ("versionName '1.1.3.3'" in b and 'versionCode 8' in b) or ("versionName '1.1.3.4'" in b and 'versionCode 9' in b) or ("versionName '1.1.3.5'" in b and 'versionCode 10' in b) or ("versionName '1.1.3.5.1'" in b and 'versionCode 11' in b)),
+ "Camera manifest permission":'android.permission.CAMERA' in mf,
+ "Notification manifest permission":'android.permission.POST_NOTIFICATIONS' in mf,
+ "Apps Script sandbox origin":'host.endsWith("-script.googleusercontent.com")' in m,
+--- a/tools/test_v113_ui.py
++++ b/tools/test_v113_ui.py
+@@ -6,7 +6,7 @@
+ fg=(root/'app/src/main/res/drawable/ic_launcher_foreground.xml').read_text()
+ icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
+ checks={
+-    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build),
++    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build) or ("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build),
+     'Mobile page scale constant': 'MOBILE_PAGE_SCALE = 0.88' in main,
+     'Responsive viewport scale injection': 'initial-scale=" + scale' in main and 'overflowX' in main,
+     'Viewport applied to popup too': 'if (view != webView) return;' not in main[main.find('private void enforceResponsiveViewport'):main.find('private class ESiswaWebViewClient')],
+--- a/tools/test_v1131_camera_print.py
++++ b/tools/test_v1131_camera_print.py
+@@ -6,7 +6,7 @@
+ build = (root / 'app/build.gradle').read_text()
+ 
+ checks = {
+-    'Camera patch lineage preserved': (("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build)),
++    'Camera patch lineage preserved': (("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build) or ("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build)),
+     'Android native print imports': 'android.print.PrintManager' in main and 'android.print.PrintDocumentAdapter' in main,
+     'Native print JavaScript bridge': '"ESISWAPrint"' in main and '@JavascriptInterface' in main and 'printPage' in main,
+     'Print adapter invocation': 'createPrintDocumentAdapter' in main and 'printManager.print' in main,
+--- a/tools/test_v1132_native_print_v2.py
++++ b/tools/test_v1132_native_print_v2.py
+@@ -7,7 +7,7 @@
+ manifest = (root / 'app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
+ 
+ checks = {
+-    'Version lineage through 1.1.3.3': (("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build)),
++    'Version lineage through 1.1.3.3': (("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build) or ("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build)),
+     'Jetpack WebKit dependency present': "androidx.webkit:webkit:1.17.0" in build,
+     'Document-start injection APIs imported': 'androidx.webkit.WebViewCompat' in main and 'androidx.webkit.WebViewFeature' in main,
+     'Bidirectional reply proxy imported': 'androidx.webkit.JavaScriptReplyProxy' in main and 'androidx.webkit.WebMessageCompat' in main,
+--- a/tools/test_v1133_student_print_notifications.py
++++ b/tools/test_v1133_student_print_notifications.py
+@@ -8,7 +8,7 @@
+ checks=[]
+ def ck(name, cond): checks.append((name, bool(cond)))
+ 
+-ck('version lineage 1.1.3.x code >=8', bool(re.search(r"versionCode\s+(?:8|9|1[0-9]+)", gradle)) and bool(re.search(r"versionName\s+'1\.1\.3(?:\.[0-9]+)?'", gradle)))
++ck('version lineage 1.1.3.x code >=8', bool(re.search(r"versionCode\s+(?:8|9|1[0-9]+)", gradle)) and bool(re.search(r"versionName\s+'1\.1\.3(?:\.[0-9]+){0,2}'", gradle)))
+ ck('print request carries calling-frame html', 'document.documentElement.cloneNode(true)' in main and 'printHtml' in main and 'document.baseURI' in main)
+ ck('print request parsed structurally', 'parseNativePrintRequest' in main and 'PrintRequestData' in main)
+ ck('live WebView print remains primary', 'source.createPrintDocumentAdapter' in main)
+--- a/tools/test_v1134_push_diagnostics.py
++++ b/tools/test_v1134_push_diagnostics.py
+@@ -3,8 +3,8 @@
+ main=(root/"app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text(encoding="utf-8")
+ gradle=(root/"app/build.gradle").read_text(encoding="utf-8")
+ checks={
+-    "versionCode 9+":"versionCode 9" in gradle or "versionCode 10" in gradle,
+-    "versionName 1.1.3.4+":"versionName '1.1.3.4'" in gradle or "versionName '1.1.3.5'" in gradle,
++    "versionCode 9+":"versionCode 9" in gradle or "versionCode 10" in gradle or "versionCode 11" in gradle,
++    "versionName 1.1.3.4+":"versionName '1.1.3.4'" in gradle or "versionName '1.1.3.5'" in gradle or "versionName '1.1.3.5.1'" in gradle,
+     "manual FCM refresh bridge":"requestFcmTokenRefresh" in main,
+     "native push diagnostic bridge":"getNativePushStatus" in main,
+     "permission diagnostic":"permissionGranted" in main and "POST_NOTIFICATIONS" in main,
+--- a/tools/test_v1135_print_state.py
++++ b/tools/test_v1135_print_state.py
+@@ -4,7 +4,7 @@
+ main=(root/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text(encoding='utf-8')
+ build=(root/'app/build.gradle').read_text(encoding='utf-8')
+ checks={
+- 'version 1.1.3.5 code 10': "versionName '1.1.3.5'" in build and 'versionCode 10' in build,
++ 'version 1.1.3.5+ code 10+': (("versionName '1.1.3.5'" in build and 'versionCode 10' in build) or ("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build)),
+  'stale print timeout defined': 'PRINT_STALE_TIMEOUT_MS = 8000L' in main,
+  'pending print start timestamp tracked': 'pendingPrintStartedAtMs' in main and 'SystemClock.elapsedRealtime()' in main,
+  'stale state detector exists': 'isPendingPrintStateStale()' in main,
+--- a/tools/verify_project.py
++++ b/tools/verify_project.py
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.5'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.5.1'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -55,4 +55,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.3.5 project contract satisfied')
++print('VERIFY PASS: (SSD) SMPN4D Android v1.1.3.5.1 project contract satisfied')
+--- a/tools/test_v11351_branding.py
++++ b/tools/test_v11351_branding.py
+@@ -0,0 +1,20 @@
++from pathlib import Path
++
++root=Path(__file__).resolve().parents[1]
++strings=(root/'app/src/main/res/values/strings.xml').read_text()
++build=(root/'app/build.gradle').read_text()
++service=(root/'app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java').read_text()
++main=(root/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()
++icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
++splash=root/'app/src/main/res/drawable-nodpi/launch_screen.jpg'
++checks={
++ 'app name (SSD) SMPN4D':'<string name="app_name">(SSD) SMPN4D</string>' in strings,
++ 'version 1.1.3.5.1 code 11':"versionName '1.1.3.5.1'" in build and 'versionCode 11' in build,
++ 'notification title renamed':'(SSD) SMPN4D' in service and "title:'(SSD) SMPN4D'" in main,
++ 'launcher asset present':icon.exists() and icon.stat().st_size>10000,
++ 'splash asset pres

@@ -1,0 +1,294 @@
+diff -ruN '--exclude=__pycache__' tmpapk/BUILDING.md fix_apk/BUILDING.md
+--- tmpapk/BUILDING.md	2026-09-17 08:33:13.512508040 +0000
++++ fix_apk/BUILDING.md	2026-09-17 08:35:04.450972272 +0000
+@@ -1,9 +1,9 @@
+-# Cara Build E-SISWA (SSD) Android v1.1.0
++# Cara Build E-SISWA (SSD) Android v1.1.3.5
+ 
+ ## Android Studio
+ 
+ 1. Instal Android Studio stabil terbaru.
+-2. Buka folder project `ESISWA-Android-v1.1.0`.
++2. Buka folder project `ESISWA-Android-v1.1.3.5`.
+ 3. Pastikan Android SDK Platform 36 tersedia.
+ 4. Gunakan JDK 17.
+ 5. Sync Gradle.
+@@ -19,7 +19,7 @@
+ 
+ 1. Push source ke GitHub.
+ 2. Workflow **Build Android APK** berjalan saat push ke `main` atau dapat dijalankan manual.
+-3. Artifact bernama **E-SISWA-SSD-v1.1.0-debug-apk** berisi `app-debug.apk` yang installable.
++3. Artifact bernama **E-SISWA-SSD-v1.1.3.5-debug-apk** berisi `app-debug.apk` yang installable.
+ 
+ ## Signing produksi
+ 
+diff -ruN '--exclude=__pycache__' tmpapk/README.md fix_apk/README.md
+--- tmpapk/README.md	2026-09-17 08:33:14.760503828 +0000
++++ fix_apk/README.md	2026-09-17 08:38:24.443386090 +0000
+@@ -1,4 +1,4 @@
+-# E-SISWA (SSD) Android v1.1.0
++# E-SISWA (SSD) Android v1.1.3.5
+ 
+ Android WebView wrapper untuk **E-SISWA (Sistem Siswa Digital) – SMP Negeri 4 Kota Dumai** dengan **Native Push Notification**.
+ 
+@@ -6,7 +6,7 @@
+ 
+ - Nama: **E-SISWA (SSD)**
+ - Application ID: `id.sch.smpn4dumai.esiswa`
+-- Version: `1.1.0` (versionCode 2)
++- Version: `1.1.3.5` (versionCode 10)
+ - Min Android: API 26 / Android 8.0
+ - Target/Compile: API 36 / Android 16
+ - Web App: deployment E-SISWA Google Apps Script produksi milik sekolah.
+@@ -34,7 +34,7 @@
+ 
+ ## Firebase tanpa `google-services.json`
+ 
+-v1.1.0 menggunakan `FirebaseOptions` secara programatik. APK tidak menyimpan service-account/private key. Konfigurasi client Firebase non-rahasia diambil setelah login dari backend E-SISWA, lalu disimpan lokal agar FCM dapat diinisialisasi saat proses aplikasi dibuka kembali.
++v1.1.3.5 menggunakan `FirebaseOptions` secara programatik. APK tidak menyimpan service-account/private key. Konfigurasi client Firebase non-rahasia diambil setelah login dari backend E-SISWA, lalu disimpan lokal agar FCM dapat diinisialisasi saat proses aplikasi dibuka kembali.
+ 
+ Lihat [FIREBASE-PUSH-SETUP.md](FIREBASE-PUSH-SETUP.md) untuk konfigurasi backend.
+ 
+diff -ruN '--exclude=__pycache__' tmpapk/app/build.gradle fix_apk/app/build.gradle
+--- tmpapk/app/build.gradle	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/app/build.gradle	2026-09-17 08:35:04.450747568 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 9
+-        versionName '1.1.3.4'
++        versionCode 10
++        versionName '1.1.3.5'
+     }
+ 
+     buildTypes {
+diff -ruN '--exclude=__pycache__' tmpapk/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java fix_apk/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+--- tmpapk/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java	2026-09-17 08:07:13.397676631 +0000
+@@ -21,6 +21,7 @@
+ import android.os.Bundle;
+ import android.os.Environment;
+ import android.os.Message;
++import android.os.SystemClock;
+ import android.provider.MediaStore;
+ import android.provider.Settings;
+ import android.print.PrintAttributes;
+@@ -73,6 +74,7 @@
+     private static final int REQ_WRITE_STORAGE = 1003;
+     private static final int REQ_NOTIFICATIONS = 1004;
+     private static final long MAX_BLOB_BYTES = 50L * 1024L * 1024L;
++    private static final long PRINT_STALE_TIMEOUT_MS = 8000L;
+     private static final double MOBILE_PAGE_SCALE = 0.88;
+ 
+     private WebView webView;
+@@ -88,6 +90,7 @@
+     private JavaScriptReplyProxy pendingPrintReplyProxy;
+     private boolean pendingPrintLostFocus;
+     private WebView pendingPrintSnapshotWebView;
++    private long pendingPrintStartedAtMs;
+     private static final String WEB_NOTIFICATION_PREFS = "esiswa_web_notification_state";
+     private static final String KEY_LAST_WEB_BADGE_COUNT = "last_web_badge_count";
+     private String cachedFcmToken = "";
+@@ -535,6 +538,13 @@
+             return;
+         }
+         if (pendingPrintWebView != null) {
++            boolean stale = isPendingPrintStateStale();
++            boolean focusRecovered = hasWindowFocus() && source.hasWindowFocus();
++            if (stale || focusRecovered) {
++                clearPendingPrintState(true);
++            }
++        }
++        if (pendingPrintWebView != null) {
+             toast("Dialog cetak masih terbuka.");
+             dispatchAfterPrint(source, replyProxy);
+             return;
+@@ -552,11 +562,10 @@
+             pendingPrintWebView = source;
+             pendingPrintReplyProxy = replyProxy;
+             pendingPrintLostFocus = false;
++            pendingPrintStartedAtMs = SystemClock.elapsedRealtime();
+             printManager.print(jobName, adapter, new PrintAttributes.Builder().build());
+         } catch (Exception livePrintError) {
+-            pendingPrintWebView = null;
+-            pendingPrintReplyProxy = null;
+-            pendingPrintLostFocus = false;
++            clearPendingPrintState(false);
+             fallbackToSnapshotPrint(source, request, replyProxy);
+         }
+     }
+@@ -567,6 +576,22 @@
+         return title.length() > 80 ? title.substring(0, 80) : title;
+     }
+ 
++    private boolean isPendingPrintStateStale() {
++        return pendingPrintWebView != null
++                && pendingPrintStartedAtMs > 0
++                && (SystemClock.elapsedRealtime() - pendingPrintStartedAtMs) > PRINT_STALE_TIMEOUT_MS;
++    }
++
++    private void clearPendingPrintState(boolean destroySnapshot) {
++        WebView snapshot = pendingPrintSnapshotWebView;
++        pendingPrintWebView = null;
++        pendingPrintReplyProxy = null;
++        pendingPrintLostFocus = false;
++        pendingPrintSnapshotWebView = null;
++        pendingPrintStartedAtMs = 0L;
++        if (destroySnapshot) destroySnapshotPrintWebView(snapshot);
++    }
++
+     private void fallbackToSnapshotPrint(WebView source, PrintRequestData request, JavaScriptReplyProxy replyProxy) {
+         if (request == null || request.printHtml == null || request.printHtml.trim().isEmpty()) {
+             toast("Mode cetak Android gagal dibuka.");
+@@ -589,6 +614,7 @@
+             pendingPrintWebView = source;
+             pendingPrintReplyProxy = replyProxy;
+             pendingPrintLostFocus = false;
++            pendingPrintStartedAtMs = SystemClock.elapsedRealtime();
+             pendingPrintSnapshotWebView = snapshot;
+             snapshot.setWebViewClient(new SnapshotPrintWebViewClient(source, snapshot, request, replyProxy));
+             String baseUrl = request.baseUrl == null || request.baseUrl.trim().isEmpty() ? START_URL : request.baseUrl.trim();
+@@ -633,10 +659,7 @@
+ 
+     private void failSnapshotPrint(WebView source, JavaScriptReplyProxy replyProxy) {
+         WebView snapshot = pendingPrintSnapshotWebView;
+-        pendingPrintSnapshotWebView = null;
+-        pendingPrintWebView = null;
+-        pendingPrintReplyProxy = null;
+-        pendingPrintLostFocus = false;
++        clearPendingPrintState(false);
+         destroySnapshotPrintWebView(snapshot);
+         toast("Mode cetak Android gagal dibuka.");
+         dispatchAfterPrint(source, replyProxy);
+@@ -1128,10 +1151,7 @@
+             WebView printedView = pendingPrintWebView;
+             JavaScriptReplyProxy replyProxy = pendingPrintReplyProxy;
+             WebView snapshot = pendingPrintSnapshotWebView;
+-            pendingPrintWebView = null;
+-            pendingPrintReplyProxy = null;
+-            pendingPrintSnapshotWebView = null;
+-            pendingPrintLostFocus = false;
++            clearPendingPrintState(false);
+             destroySnapshotPrintWebView(snapshot);
+             if (printedView != null) printedView.postDelayed(() -> dispatchAfterPrint(printedView, replyProxy), 300);
+         }
+@@ -1188,11 +1208,8 @@
+         popupDialogs.clear();
+         popupBottomInsets.clear();
+         modernPrintBridge.clear();
+-        pendingPrintWebView = null;
+-        pendingPrintReplyProxy = null;
+-        pendingPrintLostFocus = false;
+         destroySnapshotPrintWebView(pendingPrintSnapshotWebView);
+-        pendingPrintSnapshotWebView = null;
++        clearPendingPrintState(false);
+         webView.stopLoading();
+         webView.removeJavascriptInterface("ESISWANative");
+         webView.removeJavascriptInterface("ESISWAPrint");
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v112_permissions.py fix_apk/tools/test_v112_permissions.py
+--- tmpapk/tools/test_v112_permissions.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/test_v112_permissions.py	2026-09-17 08:36:41.092369767 +0000
+@@ -5,7 +5,7 @@
+ mf=(r/'app/src/main/AndroidManifest.xml').read_text()
+ b=(r/'app/build.gradle').read_text()
+ c={
+-"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b) or ("versionName '1.1.3.2'" in b and 'versionCode 7' in b) or ("versionName '1.1.3.3'" in b and 'versionCode 8' in b) or ("versionName '1.1.3.4'" in b and 'versionCode 9' in b)),
++"Version lineage 1.1.3":(("versionName '1.1.3'" in b and 'versionCode 5' in b) or ("versionName '1.1.3.1'" in b and 'versionCode 6' in b) or ("versionName '1.1.3.2'" in b and 'versionCode 7' in b) or ("versionName '1.1.3.3'" in b and 'versionCode 8' in b) or ("versionName '1.1.3.4'" in b and 'versionCode 9' in b) or ("versionName '1.1.3.5'" in b and 'versionCode 10' in b)),
+ "Camera manifest permission":'android.permission.CAMERA' in mf,
+ "Notification manifest permission":'android.permission.POST_NOTIFICATIONS' in mf,
+ "Apps Script sandbox origin":'host.endsWith("-script.googleusercontent.com")' in m,
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v1131_camera_print.py fix_apk/tools/test_v1131_camera_print.py
+--- tmpapk/tools/test_v1131_camera_print.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/test_v1131_camera_print.py	2026-09-17 08:36:41.092597465 +0000
+@@ -6,7 +6,7 @@
+ build = (root / 'app/build.gradle').read_text()
+ 
+ checks = {
+-    'Camera patch lineage preserved': (("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build)),
++    'Camera patch lineage preserved': (("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build)),
+     'Android native print imports': 'android.print.PrintManager' in main and 'android.print.PrintDocumentAdapter' in main,
+     'Native print JavaScript bridge': '"ESISWAPrint"' in main and '@JavascriptInterface' in main and 'printPage' in main,
+     'Print adapter invocation': 'createPrintDocumentAdapter' in main and 'printManager.print' in main,
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v1132_native_print_v2.py fix_apk/tools/test_v1132_native_print_v2.py
+--- tmpapk/tools/test_v1132_native_print_v2.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/test_v1132_native_print_v2.py	2026-09-17 08:36:41.092639388 +0000
+@@ -7,7 +7,7 @@
+ manifest = (root / 'app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
+ 
+ checks = {
+-    'Version lineage through 1.1.3.3': (("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build)),
++    'Version lineage through 1.1.3.3': (("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build)),
+     'Jetpack WebKit dependency present': "androidx.webkit:webkit:1.17.0" in build,
+     'Document-start injection APIs imported': 'androidx.webkit.WebViewCompat' in main and 'androidx.webkit.WebViewFeature' in main,
+     'Bidirectional reply proxy imported': 'androidx.webkit.JavaScriptReplyProxy' in main and 'androidx.webkit.WebMessageCompat' in main,
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v1134_push_diagnostics.py fix_apk/tools/test_v1134_push_diagnostics.py
+--- tmpapk/tools/test_v1134_push_diagnostics.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/test_v1134_push_diagnostics.py	2026-09-17 08:36:41.092676382 +0000
+@@ -3,8 +3,8 @@
+ main=(root/"app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text(encoding="utf-8")
+ gradle=(root/"app/build.gradle").read_text(encoding="utf-8")
+ checks={
+-    "versionCode 9":"versionCode 9" in gradle,
+-    "versionName 1.1.3.4":"versionName '1.1.3.4'" in gradle,
++    "versionCode 9+":"versionCode 9" in gradle or "versionCode 10" in gradle,
++    "versionName 1.1.3.4+":"versionName '1.1.3.4'" in gradle or "versionName '1.1.3.5'" in gradle,
+     "manual FCM refresh bridge":"requestFcmTokenRefresh" in main,
+     "native push diagnostic bridge":"getNativePushStatus" in main,
+     "permission diagnostic":"permissionGranted" in main and "POST_NOTIFICATIONS" in main,
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v1135_print_state.py fix_apk/tools/test_v1135_print_state.py
+--- tmpapk/tools/test_v1135_print_state.py	1970-01-01 00:00:00.000000000 +0000
++++ fix_apk/tools/test_v1135_print_state.py	2026-09-17 08:35:27.215172857 +0000
+@@ -0,0 +1,22 @@
++from pathlib import Path
++import sys,re
++root=Path(sys.argv[1]) if len(sys.argv)>1 else Path(__file__).resolve().parents[1]
++main=(root/'app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text(encoding='utf-8')
++build=(root/'app/build.gradle').read_text(encoding='utf-8')
++checks={
++ 'version 1.1.3.5 code 10': "versionName '1.1.3.5'" in build and 'versionCode 10' in build,
++ 'stale print timeout defined': 'PRINT_STALE_TIMEOUT_MS = 8000L' in main,
++ 'pending print start timestamp tracked': 'pendingPrintStartedAtMs' in main and 'SystemClock.elapsedRealtime()' in main,
++ 'stale state detector exists': 'isPendingPrintStateStale()' in main,
++ 'central print-state cleanup exists': 'clearPendingPrintState(boolean destroySnapshot)' in main,
++ 'new print clears recovered/stale lock': 'stale || focusRecovered' in main and 'clearPendingPrintState(true)' in main,
++ 'window focus cleanup retained': 'onWindowFocusChanged' in main and 'clearPendingPrintState(false)' in main,
++ 'native print primary retained': 'source.createPrintDocumentAdapter' in main and 'printManager.print' in main,
++ 'snapshot fallback retained': 'startSnapshotPrint' in main and 'loadDataWithBaseURL' in main,
++ 'camera safe-area retained': 'applyCameraPopupSafeArea' in main and '--esiswa-native-nav-bottom' in main,
++ 'FCM diagnostics retained': 'getNativePushStatus' in main and 'requestFcmTokenRefresh' in main,
++}
++for n,ok in checks.items(): print(('PASS' if ok else 'FAIL')+' | '+n)
++bad=[n for n,ok in checks.items() if not ok]
++print(f'SUMMARY: {len(checks)-len(bad)}/{len(checks)} PASS; failures={len(bad)}')
++sys.exit(1 if bad else 0)
+diff -ruN '--exclude=__pycache__' tmpapk/tools/test_v113_ui.py fix_apk/tools/test_v113_ui.py
+--- tmpapk/tools/test_v113_ui.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/test_v113_ui.py	2026-09-17 08:36:41.092542744 +0000
+@@ -6,7 +6,7 @@
+ fg=(root/'app/src/main/res/drawable/ic_launcher_foreground.xml').read_text()
+ icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
+ checks={
+-    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build),
++    'Version lineage 1.1.3': ("versionName '1.1.3'" in build and 'versionCode 5' in build) or ("versionName '1.1.3.1'" in build and 'versionCode 6' in build) or ("versionName '1.1.3.2'" in build and 'versionCode 7' in build) or ("versionName '1.1.3.3'" in build and 'versionCode 8' in build) or ("versionName '1.1.3.4'" in build and 'versionCode 9' in build) or ("versionName '1.1.3.5'" in build and 'versionCode 10' in build),
+     'Mobile page scale constant': 'MOBILE_PAGE_SCALE = 0.88' in main,
+     'Responsive viewport scale injection': 'initial-scale=" + scale' in main and 'overflowX' in main,
+     'Viewport applied to popup too': 'if (view != webView) return;' not in main[main.find('private void enforceResponsiveViewport'):main.find('private class ESiswaWebViewClient')],
+diff -ruN '--exclude=__pycache__' tmpapk/tools/verify_project.py fix_apk/tools/verify_project.py
+--- tmpapk/tools/verify_project.py	2026-09-17 00:08:53.000000000 +0000
++++ fix_apk/tools/verify_project.py	2026-09-17 08:36:41.092720197 +0000
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.4'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.5'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -55,4 +55,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: E-SISWA Android v1.1.3.4 project contract satisfied')
++print('VERIFY PASS: E-SISWA Android v1.1.3.5 project contract satisfied')

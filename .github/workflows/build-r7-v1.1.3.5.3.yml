@@ -1,0 +1,184 @@
+name: Build E-SISWA R7 Android v1.1.3.5.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feature/r7-android-play-v11353 ]
+    paths:
+      - '.github/workflows/build-r7-v1.1.3.5.3.yml'
+      - 'revision-assets/r7-v11353.patch'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      R7_URL: https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbwkTSTL8b7A1DsRA-t79v1dheMq0BSQ0PYq_DtSd6dAlaSHAOEeGFSBaPZ7_6Bf1h3jAg/exec
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified v1.1.3.5.2 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SSD-SMPN4D-v1.1.3.5.2-FINAL-SOURCE
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 35403169464
+
+      - name: Extract verified baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$(find base-artifact -type f -name '*.zip' | head -n 1)"
+          test -n "$BASE" && test -s "$BASE"
+          rm -rf project
+          mkdir project
+          unzip -q "$BASE" -d project
+          grep -F "applicationId 'id.sch.smpn4dumai.esiswa'" project/app/build.gradle
+          grep -F "targetSdk 36" project/app/build.gradle
+          grep -F "versionCode 12" project/app/build.gradle
+          grep -F "versionName '1.1.3.5.2'" project/app/build.gradle
+
+      - name: Deep audit baseline features
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 tools/test_v11352_print_lightweight.py
+          python3 tools/test_v11351_branding.py
+          python3 tools/test_v112_permissions.py
+          python3 tools/test_v113_ui.py
+          python3 tools/test_v1131_camera_print.py
+          python3 tools/test_v1132_native_print_v2.py
+          python3 tools/test_v1133_student_print_notifications.py
+          python3 tools/test_v1134_push_diagnostics.py
+          python3 tools/test_v1135_print_state.py
+          python3 tools/verify_project.py
+
+      - name: Apply R7 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          patch --batch -p1 < ../revision-assets/r7-v11353.patch
+
+      - name: Deep audit R7 adjustments
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          url="https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbwkTSTL8b7A1DsRA-t79v1dheMq0BSQ0PYq_DtSd6dAlaSHAOEeGFSBaPZ7_6Bf1h3jAg/exec"
+          old="AKfycbw-5rjaYuUG03_gB5TiBXUNG21-N2up1ikFBF9vM5F8m5srp6Mm2bmgMxZwwi-RoKE7GA"
+          g=Path("app/build.gradle").read_text()
+          m=Path("app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
+          o=Path("app/src/main/assets/offline.html").read_text()
+          manifest=Path("app/src/main/AndroidManifest.xml").read_text()
+          service=Path("app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java").read_text()
+          firebase=Path("app/src/main/java/id/sch/smpn4dumai/esiswa/FirebaseBootstrap.java").read_text()
+          checks={
+            "versionCode 13":"versionCode 13" in g,
+            "versionName 1.1.3.5.3":"versionName '1.1.3.5.3'" in g,
+            "applicationId preserved":"applicationId 'id.sch.smpn4dumai.esiswa'" in g,
+            "compileSdk 36":"compileSdk 36" in g,
+            "targetSdk 36":"targetSdk 36" in g,
+            "R7 START_URL":url in m,
+            "R7 offline URL":url in o,
+            "old URL removed":old not in m and old not in o,
+            "camera permission":'android.permission.CAMERA' in manifest,
+            "notification permission":'android.permission.POST_NOTIFICATIONS' in manifest,
+            "cleartext disabled":'android:usesCleartextTraffic="false"' in manifest,
+            "Firebase Messaging dependency":'firebase-messaging' in g,
+            "Firebase runtime bootstrap":'FirebaseOptions.Builder' in firebase,
+            "FCM service retained":'extends FirebaseMessagingService' in service,
+            "FCM token bridge":'ESISWAAndroidPush' in m and 'FirebaseMessaging' in m,
+            "native notification mirror":'configureNativeNotificationMirror' in m,
+            "native print":'PrintManager' in m and 'configureNativePrint' in m,
+            "camera WebView grant":'onPermissionRequest' in m and 'PermissionRequest.RESOURCE_VIDEO_CAPTURE' in m,
+            "file chooser":'onShowFileChooser' in m,
+            "blob download":'handleBlobDownload' in m,
+            "popup WebView":'onCreateWindow' in m,
+            "persistent cookies":'setAcceptCookie(true)' in m and 'setAcceptThirdPartyCookies' in m,
+          }
+          fail=[k for k,v in checks.items() if not v]
+          for k,v in checks.items(): print(("PASS" if v else "FAIL"),k)
+          if fail:
+            print("R7 DEEP AUDIT FAIL",len(fail)); sys.exit(1)
+          print("R7 DEEP AUDIT PASS",len(checks),"checks")
+          PY
+          grep -RFn "$R7_URL" app/src/main/java app/src/main/assets
+          ! grep -RFn 'AKfycbw-5rjaYuUG03_gB5TiBXUNG21-N2up1ikFBF9vM5F8m5srp6Mm2bmgMxZwwi-RoKE7GA' app/src/main/java app/src/main/assets
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build APK and AAB
+        working-directory: project
+        run: gradle :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Audit build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          DBG=project/app/build/outputs/apk/debug/app-debug.apk
+          REL=project/app/build/outputs/apk/release/app-release-unsigned.apk
+          AAB=project/app/build/outputs/bundle/release/app-release.aab
+          test -s "$DBG" && test -s "$REL" && test -s "$AAB"
+          unzip -t "$DBG" >/dev/null
+          unzip -t "$REL" >/dev/null
+          unzip -t "$AAB" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='13' versionName='1.1.3.5.3'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
+          sha256sum "$DBG" "$REL" "$AAB" | tee build-sha256.txt
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.3-DEBUG.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.3-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.3-PLAY-UNSIGNED.aab
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.3-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.3-SOURCE-CI.zip >/dev/null
+          sha256sum E-SISWA-R7-ANDROID-v1.1.3.5.3-SOURCE-CI.zip | tee source-sha256.txt
+
+      - name: Upload R7 build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.3-BUILD
+          path: |
+            E-SISWA-R7-v1.1.3.5.3-DEBUG.apk
+            E-SISWA-R7-v1.1.3.5.3-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.3-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.3-SOURCE-CI.zip
+            apk-badging.txt
+            debug-apk-signature.txt
+            build-sha256.txt
+            source-sha256.txt
+          if-no-files-found: error
+          retention-days: 30

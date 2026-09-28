@@ -7,8 +7,8 @@ on:
     paths:
       - '.github/workflows/build-r7-v1.1.3.5.4-branding.yml'
       - 'revision-assets/r7-branding-v11354.patch'
-      - 'revision-assets/esiswa_logo.webp.b64'
-      - 'revision-assets/launch_screen.jpg.b64'
+      - 'revision-assets/esiswa_logo.webp'
+      - 'revision-assets/launch_screen.jpg'
 
 permissions:
   contents: read
@@ -66,17 +66,8 @@ jobs:
           set -euo pipefail
           cd project
           patch --batch -p1 < ../revision-assets/r7-branding-v11354.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          import base64
-          pairs = [
-            ('../revision-assets/esiswa_logo.webp.b64', 'app/src/main/res/drawable-nodpi/esiswa_logo.webp'),
-            ('../revision-assets/launch_screen.jpg.b64', 'app/src/main/res/drawable-nodpi/launch_screen.jpg'),
-          ]
-          for src, dst in pairs:
-            raw = ''.join(Path(src).read_text().split())
-            Path(dst).write_bytes(base64.b64decode(raw, validate=False))
-          PY
+          cp ../revision-assets/esiswa_logo.webp app/src/main/res/drawable-nodpi/esiswa_logo.webp
+          cp ../revision-assets/launch_screen.jpg app/src/main/res/drawable-nodpi/launch_screen.jpg
           echo '99610671bc369f6a7f9fa66e62ec52331b4909d5036ce9e6024d63a0719f8ee7  app/src/main/res/drawable-nodpi/esiswa_logo.webp' | sha256sum -c -
           echo 'f4c2a56a1c4ac85b18fb76650949e9194e174c4e12b9229bc2cd49329784f591  app/src/main/res/drawable-nodpi/launch_screen.jpg' | sha256sum -c -
 

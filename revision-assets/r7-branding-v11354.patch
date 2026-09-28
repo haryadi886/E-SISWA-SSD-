@@ -1,0 +1,68 @@
+--- baseline11353/app/build.gradle
++++ source/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 13
+-        versionName '1.1.3.5.3'
++        versionCode 14
++        versionName '1.1.3.5.4'
+     }
+ 
+     buildTypes {
+--- baseline11353/app/src/main/res/layout/activity_main.xml
++++ source/app/src/main/res/layout/activity_main.xml
+@@ -26,7 +26,7 @@
+             android:layout_height="match_parent"
+             android:contentDescription="@string/app_name"
+             android:scaleType="fitCenter"
+-            android:src="@drawable/esiswa_logo" />
++            android:src="@drawable/launch_screen" />
+     </FrameLayout>
+ 
+     <ProgressBar
+--- baseline11353/tools/test_v11351_branding.py
++++ source/tools/test_v11351_branding.py
+@@ -6,9 +6,9 @@
+ icon=root/'app/src/main/res/drawable-nodpi/esiswa_logo.webp'
+ checks={
+  'app name (SSD) SMPN4D':'<string name="app_name">(SSD) SMPN4D</string>' in strings,
+- 'version 1.1.3.5.1+ branding lineage':(("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build) or ("versionName '1.1.3.5.2'" in build and 'versionCode 12' in build) or ("versionName '1.1.3.5.3'" in build and 'versionCode 13' in build)),
++ 'version 1.1.3.5.1+ branding lineage':(("versionName '1.1.3.5.1'" in build and 'versionCode 11' in build) or ("versionName '1.1.3.5.2'" in build and 'versionCode 12' in build) or ("versionName '1.1.3.5.3'" in build and 'versionCode 13' in build) or ("versionName '1.1.3.5.4'" in build and 'versionCode 14' in build)),
+  'new launcher logo nonempty':icon.exists() and icon.stat().st_size>10000,
+- 'launch overlay uses new logo':'android:src="@drawable/esiswa_logo"' in layout,
++ 'launch overlay uses dedicated splash':'android:src="@drawable/launch_screen"' in layout,
+ }
+ bad=[k for k,v in checks.items() if not v]
+ for k,v in checks.items(): print(('PASS' if v else 'FAIL')+' - '+k)
+--- baseline11353/tools/test_v11353_r7.py
++++ source/tools/test_v11353_r7.py
+@@ -8,8 +8,8 @@
+ new_url="https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbwkTSTL8b7A1DsRA-t79v1dheMq0BSQ0PYq_DtSd6dAlaSHAOEeGFSBaPZ7_6Bf1h3jAg/exec"
+ old_token="AKfycbw-5rjaYuUG03_gB5TiBXUNG21-N2up1ikFBF9vM5F8m5srp6Mm2bmgMxZwwi-RoKE7GA"
+ checks={
+- 'versionName 1.1.3.5.3': "versionName '1.1.3.5.3'" in gradle,
+- 'versionCode 13': 'versionCode 13' in gradle,
++ 'versionName 1.1.3.5.4': "versionName '1.1.3.5.4'" in gradle,
++ 'versionCode 14': 'versionCode 14' in gradle,
+  'targetSdk 36': 'targetSdk 36' in gradle,
+  'applicationId preserved': "applicationId 'id.sch.smpn4dumai.esiswa'" in gradle,
+  'R7 START_URL': new_url in main,
+--- baseline11353/tools/verify_project.py
++++ source/tools/verify_project.py
+@@ -9,7 +9,7 @@
+     if text is not None and text not in s: errors.append(f'MISSING {label or text} in {path}')
+     return s
+ need(Path('settings.gradle'), 'rootProject.name = "E-SISWA-SSD"')
+-appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.5.3'")
++appgrad=need(Path('app/build.gradle'), "versionName '1.1.3.5.4'")
+ need(Path('app/build.gradle'), 'firebase-messaging', 'Firebase Messaging')
+ need(Path('app/build.gradle'), 'compileSdk 36')
+ manifest=need(Path('app/src/main/AndroidManifest.xml'), 'android.permission.POST_NOTIFICATIONS')
+@@ -55,4 +55,4 @@
+     print('VERIFY FAIL:',len(errors))
+     for e in errors: print(' -',e)
+     sys.exit(1)
+-print('VERIFY PASS: (SSD) SMPN4D Android R7 v1.1.3.5.3 project contract satisfied')
++print('VERIFY PASS: (SSD) SMPN4D Android R7 v1.1.3.5.4 project contract satisfied')

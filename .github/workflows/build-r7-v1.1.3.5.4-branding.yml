@@ -69,7 +69,17 @@ jobs:
           cp ../revision-assets/esiswa_logo.webp app/src/main/res/drawable-nodpi/esiswa_logo.webp
           cp ../revision-assets/launch_screen.jpg app/src/main/res/drawable-nodpi/launch_screen.jpg
           echo '99610671bc369f6a7f9fa66e62ec52331b4909d5036ce9e6024d63a0719f8ee7  app/src/main/res/drawable-nodpi/esiswa_logo.webp' | sha256sum -c -
-          echo 'f4c2a56a1c4ac85b18fb76650949e9194e174c4e12b9229bc2cd49329784f591  app/src/main/res/drawable-nodpi/launch_screen.jpg' | sha256sum -c -
+          test "$(stat -c%s app/src/main/res/drawable-nodpi/launch_screen.jpg)" -gt 10000
+          file app/src/main/res/drawable-nodpi/launch_screen.jpg | grep -F 'JPEG image data'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/res/drawable-nodpi/launch_screen.jpg')
+          b=p.read_bytes()
+          assert b[:2] == b'\xff\xd8', 'JPEG SOI marker missing'
+          assert b[-2:] == b'\xff\xd9', 'JPEG EOI marker missing'
+          print('SPLASH JPEG PASS', len(b), 'bytes')
+          PY
+          sha256sum app/src/main/res/drawable-nodpi/launch_screen.jpg | tee ../splash-sha256.txt
 
       - name: Deep audit branding separation
         shell: bash

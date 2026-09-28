@@ -75,7 +75,7 @@ jobs:
           ]
           for src, dst in pairs:
             raw = ''.join(Path(src).read_text().split())
-            Path(dst).write_bytes(base64.b64decode(raw, validate=True))
+            Path(dst).write_bytes(base64.b64decode(raw, validate=False))
           PY
           echo '99610671bc369f6a7f9fa66e62ec52331b4909d5036ce9e6024d63a0719f8ee7  app/src/main/res/drawable-nodpi/esiswa_logo.webp' | sha256sum -c -
           echo 'f4c2a56a1c4ac85b18fb76650949e9194e174c4e12b9229bc2cd49329784f591  app/src/main/res/drawable-nodpi/launch_screen.jpg' | sha256sum -c -

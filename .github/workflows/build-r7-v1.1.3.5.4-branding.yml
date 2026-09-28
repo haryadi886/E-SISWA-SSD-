@@ -1,0 +1,192 @@
+name: Build E-SISWA R7 Android v1.1.3.5.4 Branding
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feature/r7-branding-v11354 ]
+    paths:
+      - '.github/workflows/build-r7-v1.1.3.5.4-branding.yml'
+      - 'revision-assets/r7-branding-v11354.patch'
+      - 'revision-assets/esiswa_logo.webp.b64'
+      - 'revision-assets/launch_screen.jpg.b64'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified R7 v1.1.3.5.3 build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.3-BUILD
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 36333267505
+
+      - name: Extract R7 v1.1.3.5.3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$(find base-artifact -type f -name 'E-SISWA-R7-ANDROID-v1.1.3.5.3-SOURCE-CI.zip' | head -n 1)"
+          test -n "$BASE" && test -s "$BASE"
+          rm -rf project
+          mkdir project
+          unzip -q "$BASE" -d project
+          grep -F "applicationId 'id.sch.smpn4dumai.esiswa'" project/app/build.gradle
+          grep -F "versionCode 13" project/app/build.gradle
+          grep -F "versionName '1.1.3.5.3'" project/app/build.gradle
+
+      - name: Baseline regression audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 tools/test_v11353_r7.py
+          python3 tools/test_v11352_print_lightweight.py
+          python3 tools/test_v11351_branding.py
+          python3 tools/test_v112_permissions.py
+          python3 tools/test_v113_ui.py
+          python3 tools/test_v1131_camera_print.py
+          python3 tools/test_v1132_native_print_v2.py
+          python3 tools/test_v1133_student_print_notifications.py
+          python3 tools/test_v1134_push_diagnostics.py
+          python3 tools/test_v1135_print_state.py
+          python3 tools/verify_project.py
+
+      - name: Apply v1.1.3.5.4 branding patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          patch --batch -p1 < ../revision-assets/r7-branding-v11354.patch
+          base64 -d ../revision-assets/esiswa_logo.webp.b64 > app/src/main/res/drawable-nodpi/esiswa_logo.webp
+          base64 -d ../revision-assets/launch_screen.jpg.b64 > app/src/main/res/drawable-nodpi/launch_screen.jpg
+          echo '99610671bc369f6a7f9fa66e62ec52331b4909d5036ce9e6024d63a0719f8ee7  app/src/main/res/drawable-nodpi/esiswa_logo.webp' | sha256sum -c -
+          echo 'eca325a4bd103ed09c3e352c5c23c5d0b54c2fadc2ea30dba6324fb9264c59c7  app/src/main/res/drawable-nodpi/launch_screen.jpg' | sha256sum -c -
+
+      - name: Deep audit branding separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          g=Path('app/build.gradle').read_text()
+          layout=Path('app/src/main/res/layout/activity_main.xml').read_text()
+          fg=Path('app/src/main/res/drawable/ic_launcher_foreground.xml').read_text()
+          manifest=Path('app/src/main/AndroidManifest.xml').read_text()
+          m=Path('app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java').read_text()
+          checks={
+            'versionCode 14':'versionCode 14' in g,
+            'versionName 1.1.3.5.4':"versionName '1.1.3.5.4'" in g,
+            'package preserved':"applicationId 'id.sch.smpn4dumai.esiswa'" in g,
+            'target 36':'targetSdk 36' in g,
+            'launcher still uses esiswa_logo':'@drawable/esiswa_logo' in fg,
+            'splash now uses launch_screen':'@drawable/launch_screen' in layout,
+            'launcher and splash separated':'@drawable/launch_screen' not in fg,
+            'icon file exists':Path('app/src/main/res/drawable-nodpi/esiswa_logo.webp').stat().st_size>5000,
+            'splash file exists':Path('app/src/main/res/drawable-nodpi/launch_screen.jpg').stat().st_size>10000,
+            'camera permission':'android.permission.CAMERA' in manifest,
+            'notification permission':'android.permission.POST_NOTIFICATIONS' in manifest,
+            'cleartext disabled':'android:usesCleartextTraffic="false"' in manifest,
+            'FCM bridge preserved':'ESISWAAndroidPush' in m and 'FirebaseMessaging' in m,
+            'native print preserved':'PrintManager' in m,
+            'R7 URL preserved':'AKfycbwkTSTL8b7A1DsRA-t79v1dheMq0BSQ0PYq_DtSd6dAlaSHAOEeGFSBaPZ7_6Bf1h3jAg' in m,
+          }
+          fail=[k for k,v in checks.items() if not v]
+          for k,v in checks.items(): print(('PASS' if v else 'FAIL'),k)
+          if fail: sys.exit(1)
+          print('R7 BRANDING DEEP AUDIT PASS',len(checks),'checks')
+          PY
+
+      - name: Functional regression after branding
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 tools/test_v11352_print_lightweight.py
+          python3 tools/test_v11351_branding.py
+          python3 tools/test_v112_permissions.py
+          python3 tools/test_v113_ui.py
+          python3 tools/test_v1131_camera_print.py
+          python3 tools/test_v1132_native_print_v2.py
+          python3 tools/test_v1133_student_print_notifications.py
+          python3 tools/test_v1134_push_diagnostics.py
+          python3 tools/test_v1135_print_state.py
+          python3 tools/verify_project.py
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build APK and AAB
+        working-directory: project
+        run: gradle :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Audit build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          DBG=project/app/build/outputs/apk/debug/app-debug.apk
+          REL=project/app/build/outputs/apk/release/app-release-unsigned.apk
+          AAB=project/app/build/outputs/bundle/release/app-release.aab
+          test -s "$DBG" && test -s "$REL" && test -s "$AAB"
+          unzip -t "$DBG" >/dev/null
+          unzip -t "$REL" >/dev/null
+          unzip -t "$AAB" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='14' versionName='1.1.3.5.4'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
+          sha256sum "$DBG" "$REL" "$AAB" | tee build-sha256.txt
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.4-DEBUG.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.4-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.4-PLAY-UNSIGNED.aab
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.4-SOURCE-CI.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.4-SOURCE-CI.zip >/dev/null
+          sha256sum E-SISWA-R7-ANDROID-v1.1.3.5.4-SOURCE-CI.zip | tee source-sha256.txt
+
+      - name: Upload R7 v1.1.3.5.4 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.4-BRANDING-BUILD
+          path: |
+            E-SISWA-R7-v1.1.3.5.4-DEBUG.apk
+            E-SISWA-R7-v1.1.3.5.4-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.4-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.4-SOURCE-CI.zip
+            apk-badging.txt
+            debug-apk-signature.txt
+            build-sha256.txt
+            source-sha256.txt
+          if-no-files-found: error
+          retention-days: 30

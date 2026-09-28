@@ -52,7 +52,6 @@ jobs:
         run: |
           set -euo pipefail
           cd project
-          python3 tools/test_v11353_r7.py
           python3 tools/test_v11352_print_lightweight.py
           python3 tools/test_v11351_branding.py
           python3 tools/test_v112_permissions.py

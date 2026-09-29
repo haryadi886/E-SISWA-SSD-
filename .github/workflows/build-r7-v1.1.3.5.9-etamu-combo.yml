@@ -1,0 +1,145 @@
+name: Build E-SISWA R7 Android v1.1.3.5.9 E-TAMU Responsive Combo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feature/r7-etamu-responsive-safearea-v11359 ]
+    paths:
+      - '.github/workflows/build-r7-v1.1.3.5.9-etamu-combo.yml'
+      - 'revision-assets/v11359-etamu-combo/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exact v1.1.3.5.8 source
+        uses: actions/download-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.8-BUILD
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 36552187112
+
+      - name: Extract v1.1.3.5.8 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$(find base-artifact -type f -name 'E-SISWA-R7-ANDROID-v1.1.3.5.8-SOURCE.zip' | head -n 1)"
+          test -n "$SRC" && test -s "$SRC"
+          rm -rf project
+          mkdir project
+          unzip -q "$SRC" -d project
+          grep -F "versionCode 18" project/app/build.gradle
+          grep -F "versionName '1.1.3.5.8'" project/app/build.gradle
+          grep -F "MOBILE_PAGE_SCALE = 0.88" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F "getPersistentSessionCredential()" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          find project/app/src/main -type f -print0 | sort -z | xargs -0 sha256sum > baseline-production.sha256
+
+      - name: Apply E-TAMU responsive/safe-area combo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          patch --batch -p1 < ../revision-assets/v11359-etamu-combo/etamu-responsive-safearea.patch
+          cp ../revision-assets/v11359-etamu-combo/test_v11359_etamu_combo.py tools/test_v11359_etamu_combo.py
+          python3 tools/test_v11359_etamu_combo.py
+
+      - name: Verify only intended production files changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          find project/app/src/main -type f -print0 | sort -z | xargs -0 sha256sum > combo-production.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          def read(p):
+              out={}
+              for line in Path(p).read_text().splitlines():
+                  h,path=line.split(None,1)
+                  out[path.strip()]=h
+              return out
+          a=read('baseline-production.sha256')
+          b=read('combo-production.sha256')
+          changed=sorted(k for k in set(a)|set(b) if a.get(k)!=b.get(k))
+          print('Changed app/src/main files:', changed)
+          allowed={
+            'project/app/src/main/AndroidManifest.xml',
+            'project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java',
+          }
+          if set(changed)!=allowed:
+              raise SystemExit('Unexpected production changes: '+repr(changed))
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build APK and AAB
+        working-directory: project
+        run: gradle :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Audit build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          DBG=project/app/build/outputs/apk/debug/app-debug.apk
+          REL=project/app/build/outputs/apk/release/app-release-unsigned.apk
+          AAB=project/app/build/outputs/bundle/release/app-release.aab
+          test -s "$DBG" && test -s "$REL" && test -s "$AAB"
+          unzip -t "$DBG" >/dev/null
+          unzip -t "$REL" >/dev/null
+          unzip -t "$AAB" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='19' versionName='1.1.3.5.9'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-APK-UJI.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-PLAY-UNSIGNED.aab
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.9-ETAMU-COMBO-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.9-ETAMU-COMBO-SOURCE.zip >/dev/null
+          sha256sum             E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-APK-UJI.apk             E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-RELEASE-UNSIGNED.apk             E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-PLAY-UNSIGNED.aab             E-SISWA-R7-ANDROID-v1.1.3.5.9-ETAMU-COMBO-SOURCE.zip             | tee SHA256-v11359-etamu-combo.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-BUILD
+          path: |
+            E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-APK-UJI.apk
+            E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.9-ETAMU-COMBO-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.9-ETAMU-COMBO-SOURCE.zip
+            apk-badging.txt
+            debug-apk-signature.txt
+            SHA256-v11359-etamu-combo.txt
+          if-no-files-found: error
+          retention-days: 30

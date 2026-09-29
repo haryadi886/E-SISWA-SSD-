@@ -1,0 +1,156 @@
+name: Build E-SISWA R7 Android v1.1.3.5.9 Responsive Report Native
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feature/r7-responsive-report-v11359 ]
+    paths:
+      - '.github/workflows/build-r7-v1.1.3.5.9.yml'
+      - 'revision-assets/v11359/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified v1.1.3.5.8 build
+        uses: actions/download-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.8-BUILD
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 36552187112
+
+      - name: Extract exact v1.1.3.5.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$(find base-artifact -type f -name 'E-SISWA-R7-ANDROID-v1.1.3.5.8-SOURCE.zip' | head -n 1)"
+          test -n "$SRC" && test -s "$SRC"
+          rm -rf project
+          mkdir project
+          unzip -q "$SRC" -d project
+          grep -F "versionCode 18" project/app/build.gradle
+          grep -F "versionName '1.1.3.5.8'" project/app/build.gradle
+          grep -F "MOBILE_PAGE_SCALE = 0.88" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F "getPersistentSessionCredential()" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+
+      - name: Apply responsive/report-native patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          patch --batch -p1 < ../revision-assets/v11359/responsive-report-native.patch
+          cp ../revision-assets/v11359/test_v11359_responsive_report.py tools/test_v11359_responsive_report.py
+          python3 tools/test_v11359_responsive_report.py
+
+      - name: Deep audit retained native features
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd project
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          m=Path("app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
+          g=Path("app/build.gradle").read_text()
+          layout=Path("app/src/main/res/layout/activity_main.xml").read_text()
+          manifest=Path("app/src/main/AndroidManifest.xml").read_text()
+          service=Path("app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java").read_text()
+          checks={
+            "versionCode 19":"versionCode 19" in g,
+            "versionName 1.1.3.5.9":"versionName '1.1.3.5.9'" in g,
+            "package":"applicationId 'id.sch.smpn4dumai.esiswa'" in g,
+            "target 36":"targetSdk 36" in g and "compileSdk 36" in g,
+            "ETAMU viewport":"setTextZoom(100)" in m and "setUseWideViewPort(true)" in m and "setLoadWithOverviewMode(true)" in m,
+            "old forced scale removed":"MOBILE_PAGE_SCALE" not in m and "setInitialScale(0)" not in m,
+            "native JS dialogs":"onJsAlert" in m and "onJsConfirm" in m and "onJsPrompt" in m,
+            "Google direct export":"isGoogleDirectExportUri" in m and "startNativeGoogleExportDownload" in m,
+            "native download":"DownloadManager.Request" in m and "saveBase64Download" in m,
+            "native print":"__ESISWA_NATIVE_PRINT_V4_INSTALLED" in m and "PrintManager" in m,
+            "persistent login":"esiswa_android_persistent_auth" in m and "getPersistentSessionCredential()" in m and ".commit()" in m,
+            "FCM":"ESISWAAndroidPush" in m and "FirebaseMessaging" in m and "extends FirebaseMessagingService" in service,
+            "camera safe area":"applyCameraPopupSafeArea" in m and "--esiswa-native-nav-bottom" in m,
+            "HD splash":"@drawable/launch_screen" in layout,
+            "notification permission":"android.permission.POST_NOTIFICATIONS" in manifest,
+            "cleartext disabled":'android:usesCleartextTraffic="false"' in manifest,
+          }
+          bad=[k for k,v in checks.items() if not v]
+          for k,v in checks.items(): print(("PASS" if v else "FAIL"), k)
+          if bad:
+            print("DEEP AUDIT FAIL", bad); sys.exit(1)
+          print("DEEP AUDIT PASS", len(checks), "checks")
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build APK and AAB
+        working-directory: project
+        run: gradle :app:assembleDebug :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Audit outputs and package source
+        shell: bash
+        run: |
+          set -euo pipefail
+          DBG=project/app/build/outputs/apk/debug/app-debug.apk
+          REL=project/app/build/outputs/apk/release/app-release-unsigned.apk
+          AAB=project/app/build/outputs/bundle/release/app-release.aab
+          test -s "$DBG" && test -s "$REL" && test -s "$AAB"
+          unzip -t "$DBG" >/dev/null
+          unzip -t "$REL" >/dev/null
+          unzip -t "$AAB" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='19' versionName='1.1.3.5.9'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.9-APK-UJI.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.9-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.9-PLAY-UNSIGNED.aab
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.9-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.9-SOURCE.zip >/dev/null
+          sha256sum E-SISWA-R7-v1.1.3.5.9-APK-UJI.apk E-SISWA-R7-v1.1.3.5.9-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.9-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.9-SOURCE.zip | tee SHA256-v11359.txt
+
+      - name: Upload v1.1.3.5.9 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.9-BUILD
+          path: |
+            E-SISWA-R7-v1.1.3.5.9-APK-UJI.apk
+            E-SISWA-R7-v1.1.3.5.9-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.9-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.9-SOURCE.zip
+            apk-badging.txt
+            debug-apk-signature.txt
+            SHA256-v11359.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,114 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 18
+-        versionName '1.1.3.5.8'
++        versionCode 19
++        versionName '1.1.3.5.9'
+     }
+ 
+     buildTypes {
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -40,7 +40,8 @@
+             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+             android:exported="true"
+             android:launchMode="singleTask"
+-            android:screenOrientation="unspecified">
++            android:screenOrientation="unspecified"
++            android:windowSoftInputMode="adjustResize">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -75,7 +75,6 @@
+     private static final int REQ_NOTIFICATIONS = 1004;
+     private static final long MAX_BLOB_BYTES = 50L * 1024L * 1024L;
+     private static final long PRINT_STALE_TIMEOUT_MS = 8000L;
+-    private static final double MOBILE_PAGE_SCALE = 0.88;
+ 
+     private WebView webView;
+     private ProgressBar progressBar;
+@@ -107,6 +106,12 @@
+     protected void onCreate(Bundle savedInstanceState) {
+         setTheme(R.style.Theme_ESISWA);
+         super.onCreate(savedInstanceState);
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++            getWindow().setNavigationBarContrastEnforced(false);
++        }
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
++            getWindow().setDecorFitsSystemWindows(true);
++        }
+         setContentView(R.layout.activity_main);
+ 
+         progressBar = findViewById(R.id.progress);
+@@ -140,6 +145,8 @@
+         settings.setLoadsImagesAutomatically(true);
+         settings.setUseWideViewPort(true);
+         settings.setLoadWithOverviewMode(true);
++        // Responsif mengikuti pola E-TAMU: wide viewport + overview mode + native initial scale,
++        // tanpa memaksa ulang meta viewport halaman menjadi 0.88.
+         settings.setTextZoom(96);
+         target.setInitialScale(0);
+         settings.setSupportZoom(true);
+@@ -431,20 +438,30 @@
+                 .start();
+     }
+ 
+-    private void enforceResponsiveViewport(WebView view) {
+-        if (view == null) return;
+-        final String scale = String.format(Locale.US, "%.2f", MOBILE_PAGE_SCALE);
++    private void normalizeAppsScriptOuterFrame(WebView view, String url) {
++        if (view == null || url == null) return;
++        Uri uri;
++        try { uri = Uri.parse(url); } catch (Exception ignored) { return; }
++        if (!"script.google.com".equalsIgnoreCase(uri.getHost())) return;
+         final String js = "(function(){"
+-                + "var m=document.querySelector('meta[name=\"viewport\"]');"
+-                + "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}"
+-                + "m.setAttribute('content','width=device-width, initial-scale=" + scale + ", minimum-scale=0.75, maximum-scale=3.0, viewport-fit=cover');"
++                + "try{"
+                 + "var h=document.documentElement,b=document.body;"
+-                + "if(h){h.style.maxWidth='100%';h.style.overflowX='hidden';}"
+-                + "if(b){b.style.maxWidth='100%';b.style.overflowX='hidden';}"
++                + "if(h){h.style.setProperty('width','100%','important');h.style.setProperty('height','100%','important');h.style.setProperty('min-height','100%','important');h.style.setProperty('margin','0','important');h.style.setProperty('padding','0','important');h.style.setProperty('overflow','hidden','important');}"
++                + "if(b){b.style.setProperty('width','100%','important');b.style.setProperty('height','100%','important');b.style.setProperty('min-height','100%','important');b.style.setProperty('margin','0','important');b.style.setProperty('padding','0','important');b.style.setProperty('overflow','hidden','important');}"
++                + "var fs=document.querySelectorAll('iframe');"
++                + "for(var i=0;i<fs.length;i++){var f=fs[i];f.removeAttribute('height');f.style.setProperty('position','fixed','important');f.style.setProperty('inset','0','important');f.style.setProperty('top','0','important');f.style.setProperty('left','0','important');f.style.setProperty('right','0','important');f.style.setProperty('bottom','0','important');f.style.setProperty('width','100%','important');f.style.setProperty('height','100%','important');f.style.setProperty('min-height','100%','important');f.style.setProperty('max-height','100%','important');f.style.setProperty('margin','0','important');f.style.setProperty('padding','0','important');f.style.setProperty('border','0','important');f.style.setProperty('display','block','important');}"
++                + "}catch(e){}"
+                 + "})();";
+         view.evaluateJavascript(js, null);
+     }
+ 
++    private void scheduleAppsScriptOuterFrameNormalization(WebView view, String url) {
++        normalizeAppsScriptOuterFrame(view, url);
++        if (view == null) return;
++        view.postDelayed(() -> normalizeAppsScriptOuterFrame(view, url), 250);
++        view.postDelayed(() -> normalizeAppsScriptOuterFrame(view, url), 900);
++    }
++
+     private int resolveNavigationBarHeight() {
+         int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+         return id > 0 ? Math.max(getResources().getDimensionPixelSize(id), 0) : 0;
+@@ -883,7 +900,7 @@
+ 
+         @Override
+         public void onPageCommitVisible(WebView view, String url) {
+-            enforceResponsiveViewport(view);
++            scheduleAppsScriptOuterFrameNormalization(view, url);
+             installNativePrintBridge(view);
+             if (view != webView) {
+                 applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));
+@@ -893,7 +910,7 @@
+ 
+         @Override
+         public void onPageFinished(WebView view, String url) {
+-            enforceResponsiveViewport(view);
++            scheduleAppsScriptOuterFrameNormalization(view, url);
+             installNativePrintBridge(view);
+             if (view != webView) {
+                 applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));

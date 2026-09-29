@@ -1,0 +1,191 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,8 +10,8 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 18
+-        versionName '1.1.3.5.8'
++        versionCode 19
++        versionName '1.1.3.5.9'
+     }
+ 
+     buildTypes {
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -34,6 +34,8 @@
+ import android.webkit.CookieManager;
+ import android.webkit.DownloadListener;
+ import android.webkit.JavascriptInterface;
++import android.webkit.JsPromptResult;
++import android.webkit.JsResult;
+ import android.webkit.MimeTypeMap;
+ import android.webkit.PermissionRequest;
+ import android.webkit.URLUtil;
+@@ -44,6 +46,7 @@
+ import android.webkit.WebSettings;
+ import android.webkit.WebView;
+ import android.webkit.WebViewClient;
++import android.widget.EditText;
+ import android.widget.ProgressBar;
+ import android.widget.Toast;
+ 
+@@ -75,7 +78,6 @@
+     private static final int REQ_NOTIFICATIONS = 1004;
+     private static final long MAX_BLOB_BYTES = 50L * 1024L * 1024L;
+     private static final long PRINT_STALE_TIMEOUT_MS = 8000L;
+-    private static final double MOBILE_PAGE_SCALE = 0.88;
+ 
+     private WebView webView;
+     private ProgressBar progressBar;
+@@ -140,9 +142,10 @@
+         settings.setLoadsImagesAutomatically(true);
+         settings.setUseWideViewPort(true);
+         settings.setLoadWithOverviewMode(true);
+-        settings.setTextZoom(96);
+-        target.setInitialScale(0);
+-        settings.setSupportZoom(true);
++        // Samakan perilaku viewport dengan E-TAMU: halaman web mengatur width=device-width sendiri.
++        // Jangan paksa initial-scale dari native karena membuat ukuran APK berbeda dari Chrome.
++        settings.setTextZoom(100);
++        settings.setSupportZoom(false);
+         settings.setBuiltInZoomControls(false);
+         settings.setDisplayZoomControls(false);
+         settings.setMediaPlaybackRequiresUserGesture(false);
+@@ -196,6 +199,39 @@
+                 || host.endsWith("-script.googleusercontent.com");
+     }
+ 
++    private boolean isGoogleDirectExportUri(Uri uri) {
++        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) return false;
++        String host = uri.getHost();
++        String path = uri.getPath();
++        if (host == null) return false;
++        host = host.toLowerCase(Locale.ROOT);
++        path = path == null ? "" : path.toLowerCase(Locale.ROOT);
++        if (host.equals("docs.google.com") && path.contains("/export")) return true;
++        if (host.equals("drive.google.com")) {
++            String export = uri.getQueryParameter("export");
++            return "download".equalsIgnoreCase(export);
++        }
++        return false;
++    }
++
++    private boolean startNativeGoogleExportDownload(WebView source, Uri uri) {
++        if (!isGoogleDirectExportUri(uri)) return false;
++        try {
++            String url = uri.toString();
++            String guessed = URLUtil.guessFileName(url, null, null);
++            PendingDownload data = new PendingDownload(
++                    url,
++                    source == null ? null : source.getSettings().getUserAgentString(),
++                    "attachment; filename=\"" + safeFilename(guessed) + "\"",
++                    null
++            );
++            enqueueDownload(data);
++            return true;
++        } catch (Exception ignored) {
++            return false;
++        }
++    }
++
+     private boolean openExternal(Uri uri) {
+         if (uri == null) return false;
+         try {
+@@ -431,20 +467,6 @@
+                 .start();
+     }
+ 
+-    private void enforceResponsiveViewport(WebView view) {
+-        if (view == null) return;
+-        final String scale = String.format(Locale.US, "%.2f", MOBILE_PAGE_SCALE);
+-        final String js = "(function(){"
+-                + "var m=document.querySelector('meta[name=\"viewport\"]');"
+-                + "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}"
+-                + "m.setAttribute('content','width=device-width, initial-scale=" + scale + ", minimum-scale=0.75, maximum-scale=3.0, viewport-fit=cover');"
+-                + "var h=document.documentElement,b=document.body;"
+-                + "if(h){h.style.maxWidth='100%';h.style.overflowX='hidden';}"
+-                + "if(b){b.style.maxWidth='100%';b.style.overflowX='hidden';}"
+-                + "})();";
+-        view.evaluateJavascript(js, null);
+-    }
+-
+     private int resolveNavigationBarHeight() {
+         int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+         return id > 0 ? Math.max(getResources().getDimensionPixelSize(id), 0) : 0;
+@@ -870,6 +892,9 @@
+             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+             if ("file".equals(scheme) && uri.toString().startsWith("file:///android_asset/")) return false;
+             if (("http".equals(scheme) || "https".equals(scheme)) && isTrustedWebOrigin(uri)) return false;
++            // Laporan Google yang berupa direct export langsung masuk Download Manager APK,
++            // sehingga tidak membuka halaman/branding Google terlebih dahulu.
++            if (startNativeGoogleExportDownload(view, uri)) return true;
+             return openExternal(uri);
+         }
+ 
+@@ -883,7 +908,6 @@
+ 
+         @Override
+         public void onPageCommitVisible(WebView view, String url) {
+-            enforceResponsiveViewport(view);
+             installNativePrintBridge(view);
+             if (view != webView) {
+                 applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));
+@@ -893,7 +917,6 @@
+ 
+         @Override
+         public void onPageFinished(WebView view, String url) {
+-            enforceResponsiveViewport(view);
+             installNativePrintBridge(view);
+             if (view != webView) {
+                 applyCameraPopupSafeArea(view, popupBottomInsets.getOrDefault(view, resolveNavigationBarHeight()));
+@@ -933,6 +956,49 @@
+         }
+ 
+         @Override
++        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
++            if (isFinishing()) { result.cancel(); return true; }
++            new AlertDialog.Builder(MainActivity.this)
++                    .setTitle("E-SISWA")
++                    .setMessage(message == null ? "" : message)
++                    .setPositiveButton("OK", (d, which) -> result.confirm())
++                    .setOnCancelListener(d -> result.cancel())
++                    .show();
++            return true;
++        }
++
++        @Override
++        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
++            if (isFinishing()) { result.cancel(); return true; }
++            new AlertDialog.Builder(MainActivity.this)
++                    .setTitle("E-SISWA")
++                    .setMessage(message == null ? "" : message)
++                    .setPositiveButton("Ya", (d, which) -> result.confirm())
++                    .setNegativeButton("Batal", (d, which) -> result.cancel())
++                    .setOnCancelListener(d -> result.cancel())
++                    .show();
++            return true;
++        }
++
++        @Override
++        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
++            if (isFinishing()) { result.cancel(); return true; }
++            final EditText input = new EditText(MainActivity.this);
++            input.setSingleLine(true);
++            input.setText(defaultValue == null ? "" : defaultValue);
++            input.setSelection(input.getText().length());
++            new AlertDialog.Builder(MainActivity.this)
++                    .setTitle("E-SISWA")
++                    .setMessage(message == null ? "" : message)
++                    .setView(input)
++                    .setPositiveButton("OK", (d, which) -> result.confirm(input.getText().toString()))
++                    .setNegativeButton("Batal", (d, which) -> result.cancel())
++                    .setOnCancelListener(d -> result.cancel())
++                    .show();
++            return true;
++        }
++
++        @Override
+         public void onPermissionRequest(PermissionRequest request) {
+             runOnUiThread(() -> {
+                 if (!isTrustedCameraOrigin(request.getOrigin())) {

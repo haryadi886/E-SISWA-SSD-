@@ -1,0 +1,60 @@
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
+@@ -31,9 +31,14 @@
+         Network network = connectivityManager.getActiveNetwork();
+         if (network == null) return false;
+         NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(network);
+-        return caps != null
+-                && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+-                && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
++        // Do not require NET_CAPABILITY_VALIDATED here. Several Android/vendor networks
++        // can provide working HTTPS internet while the OS validation probe is blocked,
++        // delayed, or filtered. The WebView/TLS layer remains the final secure check.
++        if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return false;
++        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
++                || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
++                || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
++                || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
+     }
+ 
+     public void start() {
+--- a/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
++++ b/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+@@ -1088,8 +1088,26 @@
+ 
+         @Override
+         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
++            // Fail closed for the failing HTTPS request, but do not immediately cover the
++            // whole app for a subresource SSL problem. WebView can report SSL failures for
++            // resources that are not the main document. A real main-runtime SSL failure
++            // will leave runtimeReady=false and is surfaced after a short grace period.
+             if (handler != null) handler.cancel();
+-            if (view == webView) showNativeOffline(getString(R.string.offline_secure_message));
++            if (view != webView || error == null) return;
++
++            Uri errorUri = null;
++            try { errorUri = Uri.parse(error.getUrl()); } catch (Exception ignored) {}
++            if (!RuntimePolicy.isTrustedRuntimeUri(errorUri)) return;
++
++            final String failedUrl = error.getUrl();
++            view.postDelayed(() -> {
++                if (runtimeReady || view != webView) return;
++                String current = view.getUrl();
++                boolean mainStillFailed = current == null || current.isEmpty() || failedUrl.equals(current);
++                if (mainStillFailed) {
++                    showNativeOffline(getString(R.string.offline_secure_message));
++                }
++            }, 1400);
+         }
+     }
+ 
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -10,7 +10,7 @@
+         applicationId 'id.sch.smpn4dumai.esiswa'
+         minSdk 26
+         targetSdk 36
+-        versionCode 20
++        versionCode 21
+         versionName 'RC.1.0'
+     }

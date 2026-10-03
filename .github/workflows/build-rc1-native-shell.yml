@@ -107,7 +107,12 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
           grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='21' versionName='RC.1.0'" apk-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
-          python3 /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py project | tee native-shell-contract-audit.txt
+          sed -e 's/versionCode 20/versionCode 21/g' -e 's/code20/code21/g' \
+            /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py > /tmp/test_native_shell_fix1.py
+          python3 /tmp/test_native_shell_fix1.py project | tee native-shell-contract-audit.txt
+          grep -F "TRANSPORT_WIFI" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
+          ! grep -F "NET_CAPABILITY_VALIDATED" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
+          grep -F "mainStillFailed" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
           cp "$DBG" E-SISWA-RC.1.0-NATIVE-SHELL-FIX1-APK-UJI.apk
           cp "$REL" E-SISWA-RC.1.0-NATIVE-SHELL-FIX1-RELEASE-UNSIGNED.apk
           cp "$AAB" E-SISWA-RC.1.0-NATIVE-SHELL-FIX1-PLAY-UNSIGNED.aab

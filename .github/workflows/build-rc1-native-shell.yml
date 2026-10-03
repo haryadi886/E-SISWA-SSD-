@@ -58,12 +58,15 @@ jobs:
           test -s /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py
           cd project
           patch --batch -p1 < /tmp/native-shell-assets/rc1-native-shell/native-shell-rc1.patch
-          patch --batch -p1 < ../revision-assets/rc1-native-shell/network-ssl-fix.patch
           cd ..
           python3 /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py project
+          cd project
+          patch --batch -p1 < ../revision-assets/rc1-native-shell/network-ssl-fix.patch
+          cd ..
           grep -F "versionCode 21" project/app/build.gradle
           grep -F "versionName 'RC.1.0'" project/app/build.gradle
           grep -F "TRANSPORT_WIFI" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
+          ! grep -F "NET_CAPABILITY_VALIDATED" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
           grep -F "mainStillFailed" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
 
       - name: Set up JDK 17

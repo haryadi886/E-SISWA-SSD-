@@ -58,11 +58,11 @@ jobs:
           test -s /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py
           base64 -d revision-assets/rc1-native-shell/native-push-fix2.patch.gz.b64 | gzip -d > /tmp/native-push-fix2.patch
           test -s /tmp/native-push-fix2.patch
-          mkdir -p /tmp/notification-icon-fix4
-          base64 -d revision-assets/rc1-native-shell/notification-icon-fix4.tar.gz.b64 > /tmp/notification-icon-fix4.tar.gz
-          tar -xzf /tmp/notification-icon-fix4.tar.gz -C /tmp/notification-icon-fix4
-          test -s /tmp/notification-icon-fix4/drawable-mdpi/ic_stat_notification.png
-          test -s /tmp/notification-icon-fix4/drawable-xxxhdpi/ic_stat_notification.png
+          mkdir -p /tmp/notification-icon-fix5
+          base64 -d revision-assets/rc1-native-shell/notification-icon-fix5.tar.gz.b64 > /tmp/notification-icon-fix5.tar.gz
+          tar -xzf /tmp/notification-icon-fix5.tar.gz -C /tmp/notification-icon-fix5
+          test -s /tmp/notification-icon-fix5/drawable-mdpi/ic_stat_notification.png
+          test -s /tmp/notification-icon-fix5/drawable-xxxhdpi/ic_stat_notification.png
           cd project
           patch --batch -p1 < /tmp/native-shell-assets/rc1-native-shell/native-shell-rc1.patch
           cd ..
@@ -70,14 +70,14 @@ jobs:
           cd project
           patch --batch -p1 < ../revision-assets/rc1-native-shell/network-ssl-fix.patch
           patch --batch -p1 < /tmp/native-push-fix2.patch
-          sed -i "s/versionCode 22/versionCode 24/" app/build.gradle
+          sed -i "s/versionCode 22/versionCode 25/" app/build.gradle
           rm -f app/src/main/res/drawable/ic_stat_notification.xml
           for d in drawable-mdpi drawable-hdpi drawable-xhdpi drawable-xxhdpi drawable-xxxhdpi; do
             mkdir -p "app/src/main/res/$d"
-            cp "/tmp/notification-icon-fix4/$d/ic_stat_notification.png" "app/src/main/res/$d/ic_stat_notification.png"
+            cp "/tmp/notification-icon-fix5/$d/ic_stat_notification.png" "app/src/main/res/$d/ic_stat_notification.png"
           done
           cd ..
-          grep -F "versionCode 24" project/app/build.gradle
+          grep -F "versionCode 25" project/app/build.gradle
           grep -F "versionName 'RC.1.0'" project/app/build.gradle
           grep -F "TRANSPORT_WIFI" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
           ! grep -F "NET_CAPABILITY_VALIDATED" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
@@ -128,9 +128,9 @@ jobs:
           unzip -t "$REL" >/dev/null
           unzip -t "$AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
-          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='24' versionName='RC.1.0'" apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='25' versionName='RC.1.0'" apk-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
-          sed -e 's/versionCode 20/versionCode 24/g' -e 's/code20/code24/g' \
+          sed -e 's/versionCode 20/versionCode 25/g' -e 's/code20/code25/g' \
             /tmp/native-shell-assets/rc1-native-shell/test_native_shell_rc1.py > /tmp/test_native_shell_fix1.py
           python3 /tmp/test_native_shell_fix1.py project | tee native-shell-contract-audit.txt
           grep -F "TRANSPORT_WIFI" project/app/src/main/java/id/sch/smpn4dumai/esiswa/NetworkMonitor.java
@@ -140,32 +140,32 @@ jobs:
           for d in drawable-mdpi drawable-hdpi drawable-xhdpi drawable-xxhdpi drawable-xxxhdpi; do
             test -s "project/app/src/main/res/$d/ic_stat_notification.png"
           done
-          cp "$DBG" E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-APK-UJI.apk
-          cp "$REL" E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-RELEASE-UNSIGNED.apk
-          cp "$AAB" E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-PLAY-UNSIGNED.aab
+          cp "$DBG" E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-APK-UJI.apk
+          cp "$REL" E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-PLAY-UNSIGNED.aab
           cd project
-          zip -qr ../E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          zip -qr ../E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
           cd ..
-          unzip -t E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-SOURCE.zip >/dev/null
+          unzip -t E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-SOURCE.zip >/dev/null
           sha256sum \
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-APK-UJI.apk \
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-RELEASE-UNSIGNED.apk \
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-PLAY-UNSIGNED.aab \
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-SOURCE.zip \
-            | tee SHA256-E-SISWA-RC.1.0-NATIVE-SHELL-FIX4.txt
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-APK-UJI.apk \
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-RELEASE-UNSIGNED.apk \
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-PLAY-UNSIGNED.aab \
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-SOURCE.zip \
+            | tee SHA256-E-SISWA-RC.1.0-NATIVE-SHELL-FIX5.txt
 
       - name: Upload Native Shell artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-BUILD
+          name: E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-BUILD
           path: |
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-APK-UJI.apk
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-RELEASE-UNSIGNED.apk
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-PLAY-UNSIGNED.aab
-            E-SISWA-RC.1.0-NATIVE-SHELL-FIX4-SOURCE.zip
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-APK-UJI.apk
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-RELEASE-UNSIGNED.apk
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-PLAY-UNSIGNED.aab
+            E-SISWA-RC.1.0-NATIVE-SHELL-FIX5-SOURCE.zip
             apk-badging.txt
             debug-apk-signature.txt
             native-shell-contract-audit.txt
-            SHA256-E-SISWA-RC.1.0-NATIVE-SHELL-FIX4.txt
+            SHA256-E-SISWA-RC.1.0-NATIVE-SHELL-FIX5.txt
           if-no-files-found: error
           retention-days: 30

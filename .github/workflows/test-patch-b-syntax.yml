@@ -1,0 +1,13 @@
+name: Patch B workflow syntax test
+on:
+  push:
+    branches:
+      - feature/r7-v113512-popup-dedupe
+    paths:
+      - '.github/workflows/test-patch-b-syntax.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Syntax test
+        run: echo "workflow parsed and executed"

@@ -193,7 +193,7 @@ jobs:
           src_before = {k.replace("project/", ""): v for k, v in before.items()}
           src_after = {k.replace("project/", ""): v for k, v in after.items()}
           changed_src = sorted(p for p in set(src_before) | set(src_after) if src_before.get(p) != src_after.get(p))
-          allowed_src = {"java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"}
+          allowed_src = {"app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"}
           print("Changed app/src/main files:", changed_src)
           if set(changed_src) != allowed_src:
               raise SystemExit("Unexpected production source changes: " + repr(changed_src))

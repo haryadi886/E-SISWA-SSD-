@@ -105,7 +105,8 @@ jobs:
           unzip -t "$REL" >/dev/null
           unzip -t "$AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
-          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='22' versionName='1.1.3.5.12'" apk-badging.txt\n          unzip -Z1 "$DBG" | grep -E "^res/drawable-nodpi(-v[0-9]+)?/esiswa_notification_monochrome\\.png$"
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='22' versionName='1.1.3.5.12'" apk-badging.txt
+          unzip -Z1 "$DBG" | grep -E "^res/drawable-nodpi(-v[0-9]+)?/esiswa_notification_monochrome\\.png$"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
           cp "$DBG" E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-APK-UJI.apk
           cp "$REL" E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-RELEASE-UNSIGNED.apk
@@ -113,18 +114,18 @@ jobs:
           cd project
           zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
           cd ..
-          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip >/dev/null
-          sha256sum E-SISWA-R7-v1.1.3.5.12-PATCH-B-APK-UJI.apk E-SISWA-R7-v1.1.3.5.12-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.12-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip | tee SHA256-v113512.txt
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-SOURCE.zip >/dev/null
+          sha256sum E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-APK-UJI.apk E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-SOURCE.zip | tee SHA256-v113512.txt
 
       - name: Upload Patch B artifacts
         uses: actions/upload-artifact@v4
         with:
           name: E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-BUILD
           path: |
-            E-SISWA-R7-v1.1.3.5.12-PATCH-B-APK-UJI.apk
-            E-SISWA-R7-v1.1.3.5.12-RELEASE-UNSIGNED.apk
-            E-SISWA-R7-v1.1.3.5.12-PLAY-UNSIGNED.aab
-            E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip
+            E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-APK-UJI.apk
+            E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-SOURCE.zip
             apk-badging.txt
             debug-apk-signature.txt
             SHA256-v113512.txt

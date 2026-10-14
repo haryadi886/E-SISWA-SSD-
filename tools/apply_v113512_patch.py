@@ -5,8 +5,8 @@ root = Path("project")
 build = root / "app/build.gradle"
 s = build.read_text()
 assert "versionCode 21" in s and "versionName '1.1.3.5.11'" in s, "Unexpected Android baseline"
-s = s.replace("versionCode 21", "versionCode 23", 1)
-s = s.replace("versionName '1.1.3.5.11'", "versionName '1.1.3.5.13'", 1)
+s = s.replace("versionCode 21", "versionCode 24", 1)
+s = s.replace("versionName '1.1.3.5.11'", "versionName '1.1.3.5.14'", 1)
 build.write_text(s)
 
 p = root / "app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"
@@ -129,7 +129,26 @@ first_non_blank = '''    private static String firstNonBlank(String primary, Str
 
 '''
 service_source = service_source.replace(safe_marker, first_non_blank + safe_marker, 1)
+# Use the raw PNG resource directly for Notification.Builder. Avoid indirection
+# through an XML BitmapDrawable, which can fail as a status-bar SmallIcon on
+# some Android builds/OEM frameworks.
+assert "R.drawable.ic_stat_notification" in service_source, "Notification icon insertion point missing"
+service_source = service_source.replace(
+    "R.drawable.ic_stat_notification",
+    "R.drawable.esiswa_notification_monochrome"
+)
 p.write_text(service_source)
+
+# Point Android's auto-rendered FCM notification icon directly at the PNG too.
+manifest_path = root / "app/src/main/AndroidManifest.xml"
+manifest = manifest_path.read_text()
+assert '<meta-data' in manifest and 'android:resource="@drawable/ic_stat_notification"' in manifest, "Default FCM icon metadata not found"
+manifest = manifest.replace(
+    'android:resource="@drawable/ic_stat_notification"',
+    'android:resource="@drawable/esiswa_notification_monochrome"',
+    1
+)
+manifest_path.write_text(manifest)
 
 # Install the exact, user-approved MONO98 asset in the built project.
 import base64
@@ -246,19 +265,6 @@ replacement = r'''    private void handleMirroredWebNotification(String raw) {
 ms = ms[:start] + replacement + ms[end:]
 main.write_text(ms)
 
-# Route Android's actual small-notification resource to the exact MONO98 PNG.
-# The previous vector drawable was a hard-coded bell, so embedding the PNG alone
-# did not change what Android rendered in the notification shade.
-icon_xml = root / "app/src/main/res/drawable/ic_stat_notification.xml"
-xml = icon_xml.read_text()
-assert "android:pathData=" in xml and "<vector" in xml, "Expected legacy vector notification icon not found"
-xml = '''<?xml version="1.0" encoding="utf-8"?>
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/esiswa_notification_monochrome"
-    android:gravity="center" />
-'''
-icon_xml.write_text(xml)
-
 # Contract tests for Patch B, MONO98 installation and unread-count convergence.
 ''
 s = p.read_text()
@@ -279,7 +285,8 @@ for name, ok in checks.items():
 main_source = (root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
 checks.update({
     "exact MONO98 asset installed": asset_target.is_file() and hashlib.sha256(asset_target.read_bytes()).hexdigest() == "a7b402ce4add2c3be053d33037dbd3aecc3d59f097162305229d04259d50d161",
-    "notification small icon points to MONO98 PNG": 'android:src="@drawable/esiswa_notification_monochrome"' in icon_xml.read_text() and "android:pathData=" not in icon_xml.read_text(),
+    "Notification.Builder points directly to MONO98 PNG": "R.drawable.esiswa_notification_monochrome" in s and "R.drawable.ic_stat_notification" not in s,
+    "FCM manifest icon points directly to MONO98 PNG": 'android:resource="@drawable/esiswa_notification_monochrome"' in manifest_path.read_text() and 'android:resource="@drawable/ic_stat_notification"' not in manifest_path.read_text(),
     "dynamic unread count on mirrored notification": ".setNumber(Math.max(1, unreadCount))" in s,
     "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,
     "zero unread cancels mirrored notification": "nm.cancel(WEB_BADGE_NOTIFICATION_ID)" in s and "if (count == 0)" in main_source,
@@ -289,4 +296,4 @@ checks.update({
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
     raise SystemExit("Patch B checks failed: " + ", ".join(failed))
-print("PASS - Android version bumped to 1.1.3.5.13 / versionCode 23")
+print("PASS - Android version bumped to 1.1.3.5.14 / versionCode 24")

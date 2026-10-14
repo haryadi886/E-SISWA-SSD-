@@ -45,7 +45,10 @@ jobs:
           grep -F 'setNumber(1)' project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
           find project/app/src/main -type f -print0 | sort -z | xargs -0 sha256sum > baseline-production.sha256
 
-      - name: Apply Patch B
+      - name: Syntax-check patch script
+        run: python3 -m py_compile tools/apply_v113512_patch.py
+
+      - name: Apply Patch B + MONO98 + badge synchronization
         run: python3 tools/apply_v113512_patch.py
 
       - name: Verify production source scope

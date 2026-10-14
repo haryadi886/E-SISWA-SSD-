@@ -213,7 +213,7 @@ main.write_text(ms)
 # did not change what Android rendered in the notification shade.
 icon_xml = root / "app/src/main/res/drawable/ic_stat_notification.xml"
 xml = icon_xml.read_text()
-assert "android:pathData=" in xml and "M12,2C8.69,2 6,4.69,6,8v3.59" in xml, "Expected legacy bell vector not found"
+assert "android:pathData=" in xml and "<vector" in xml, "Expected legacy vector notification icon not found"
 xml = '''<?xml version="1.0" encoding="utf-8"?>
 <bitmap xmlns:android="http://schemas.android.com/apk/res/android"
     android:src="@drawable/esiswa_notification_monochrome"

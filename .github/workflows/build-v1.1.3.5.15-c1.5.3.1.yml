@@ -1,0 +1,142 @@
+name: Build E-SISWA v1.1.3.5.15 C1.5.3.1 APK
+
+on:
+  push:
+    branches:
+      - 'build/v1.1.3.5.15-c1.5.3.1'
+    paths:
+      - '.github/workflows/build-v1.1.3.5.15-c1.5.3.1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout isolated build branch
+        uses: actions/checkout@v4
+
+      - name: Download verified v1.1.3.5.14 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-BUILD
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 38523524183
+
+      - name: Reconstruct source and apply exact .15 delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$(find base-artifact -type f -name 'E-SISWA-R7-ANDROID-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-SOURCE.zip' -print -quit)"
+          test -n "$SRC" && test -s "$SRC"
+          echo '8a839075e48f37a792f79fc04fa3d8078fe5954f32258606882de2e19d5afb02  '"$SRC" | sha256sum -c -
+          mkdir project
+          unzip -q "$SRC" -d project
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          gradle = Path('project/app/build.gradle')
+          s = gradle.read_text()
+          old = "        versionCode 24\n        versionName '1.1.3.5.14'"
+          new = "        versionCode 25\n        versionName '1.1.3.5.15'"
+          assert s.count(old) == 1, 'Unexpected base Android version metadata'
+          gradle.write_text(s.replace(old, new, 1))
+
+          java = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
+          s = java.read_text()
+          old = "var payload={notifyCount:n,title:'(SSD) SMPN4D',body:n>0?('Ada '+n+' notifikasi Pembinaan baru.'):'',kind:'pembinaan_new',view:'pembinaan'};"
+          new = "var payload={notifyCount:n,title:'Notifikasi E-SISWA',body:n>0?('Ada '+n+' notifikasi belum dibaca.'):'',kind:'general',view:'notification_center'};"
+          assert s.count(old) == 1, 'Expected .14 notification mirror text not found exactly once'
+          java.write_text(s.replace(old, new, 1))
+
+          expected = {
+              'project/app/build.gradle': '1166b02e1228a3024fbf7d61a1d090dec93021cd491b3637bbbb4f19056a14f5',
+              'project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java': '2032986aa97b24bffb3317461f146fb2b879637672f2d4dcd5b90c8fe18300a6',
+          }
+          for name, digest in expected.items():
+              actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              assert actual == digest, f'{name} SHA-256 mismatch: {actual}'
+          print('PASS: exact .15 metadata and notification-center delta verified')
+          PY
+
+      - name: Verify source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "applicationId 'id.sch.smpn4dumai.esiswa'" project/app/build.gradle
+          grep -F 'versionCode 25' project/app/build.gradle
+          grep -F "versionName '1.1.3.5.15'" project/app/build.gradle
+          grep -F "view:'notification_center'" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F 'setSmallIcon(R.drawable.esiswa_notification_monochrome)' project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
+          grep -F 'android:resource="@drawable/esiswa_notification_monochrome"' project/app/src/main/AndroidManifest.xml
+          test -s project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('project/app/src/main/AndroidManifest.xml')
+          print('PASS: Android manifest XML parses')
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Compile APK
+        working-directory: project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Audit APK identity, integrity and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=project/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='25' versionName='1.1.3.5.15'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+          cp "$APK" E-SISWA-R7-v1.1.3.5.15-C1.5.3.1-APK-UJI.apk
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.15-C1.5.3.1-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.15-C1.5.3.1-SOURCE.zip >/dev/null
+          sha256sum E-SISWA-R7-ANDROID-v1.1.3.5.15-C1.5.3.1-SOURCE.zip | tee source-sha256.txt
+
+      - name: Upload verified APK and source artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.15-C1.5.3.1-APK-UJI
+          path: |
+            E-SISWA-R7-v1.1.3.5.15-C1.5.3.1-APK-UJI.apk
+            apk-badging.txt
+            apk-signature.txt
+            apk-sha256.txt
+            E-SISWA-R7-ANDROID-v1.1.3.5.15-C1.5.3.1-SOURCE.zip
+            source-sha256.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -198,7 +198,7 @@ badge_method = r'''    public static void updateWebBadgeNotification(Context con
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
         Notification notification = new Notification.Builder(context, channelFor(kind))
-                .setSmallIcon(R.drawable.ic_stat_notification)
+                .setSmallIcon(R.drawable.esiswa_notification_monochrome)
                 .setContentTitle(safeTitle)
                 .setContentText(safeBody)
                 .setStyle(new Notification.BigTextStyle().bigText(safeBody))

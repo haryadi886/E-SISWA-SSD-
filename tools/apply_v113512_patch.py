@@ -231,6 +231,7 @@ checks.update({
     "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,
     "zero unread cancels mirrored notification": "nm.cancel(WEB_BADGE_NOTIFICATION_ID)" in s and "if (count == 0)" in main_source,
     "decreasing or unchanged unread count synchronizes mirror": "else if (count <= previous && count > 0)" in main_source,
+    "native notification taps route to Notification Center": s.count('.putExtra("push_view", "notification_center")') >= 2,
 })
 failed = [name for name, ok in checks.items() if not ok]
 if failed:

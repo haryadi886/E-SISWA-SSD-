@@ -114,7 +114,7 @@ jobs:
           unzip -t "$REL" >/dev/null
           unzip -t "$AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
-          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='23' versionName='1.1.3.5.13" apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='23' versionName='1.1.3.5.13'" apk-badging.txt
           unzip -Z1 "$DBG" | grep -E "^res/drawable-nodpi(-v[0-9]+)?/esiswa_notification_monochrome\\.png$"
           unzip -p "$DBG" resources.arsc >/dev/null
           grep -F 'android:src="@drawable/esiswa_notification_monochrome"' project/app/src/main/res/drawable/ic_stat_notification.xml

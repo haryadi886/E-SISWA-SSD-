@@ -1,4 +1,5 @@
 name: Build E-SISWA R7 Android v1.1.3.5.12 Patch B
+# Rebuild after wiring ic_stat_notification.xml to the verified MONO98 PNG.
 
 on:
   workflow_dispatch:

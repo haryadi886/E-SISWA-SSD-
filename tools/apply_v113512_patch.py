@@ -208,6 +208,19 @@ replacement = r'''    private void handleMirroredWebNotification(String raw) {
 ms = ms[:start] + replacement + ms[end:]
 main.write_text(ms)
 
+# Route Android's actual small-notification resource to the exact MONO98 PNG.
+# The previous vector drawable was a hard-coded bell, so embedding the PNG alone
+# did not change what Android rendered in the notification shade.
+icon_xml = root / "app/src/main/res/drawable/ic_stat_notification.xml"
+xml = icon_xml.read_text()
+assert "android:pathData=" in xml and "M12,2C8.69,2 6,4.69,6,8v3.59" in xml, "Expected legacy bell vector not found"
+xml = '''<?xml version="1.0" encoding="utf-8"?>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/esiswa_notification_monochrome"
+    android:gravity="center" />
+'''
+icon_xml.write_text(xml)
+
 # Contract tests for Patch B, MONO98 installation and unread-count convergence.
 ''
 s = p.read_text()
@@ -227,6 +240,7 @@ for name, ok in checks.items():
 main_source = (root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
 checks.update({
     "exact MONO98 asset installed": asset_target.is_file() and hashlib.sha256(asset_target.read_bytes()).hexdigest() == "a7b402ce4add2c3be053d33037dbd3aecc3d59f097162305229d04259d50d161",
+    "notification small icon points to MONO98 PNG": 'android:src="@drawable/esiswa_notification_monochrome"' in icon_xml.read_text() and "android:pathData=" not in icon_xml.read_text(),
     "dynamic unread count on mirrored notification": ".setNumber(Math.max(1, unreadCount))" in s,
     "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,
     "zero unread cancels mirrored notification": "nm.cancel(WEB_BADGE_NOTIFICATION_ID)" in s and "if (count == 0)" in main_source,

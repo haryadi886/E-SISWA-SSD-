@@ -156,6 +156,10 @@ badge_method = r'''    public static void updateWebBadgeNotification(Context con
 
 '''
 ss = ss.replace(method_marker, badge_method + method_marker, 1)
+# Every native notification tap opens the Notification Center first; the user
+# chooses an individual item there to navigate to its destination module.
+ss = ss.replace('.putExtra("push_view", view)', '.putExtra("push_view", "notification_center")', 1)
+ss = ss.replace('.putExtra("push_view", safe(view, "pembinaan"))', '.putExtra("push_view", "notification_center")', 1)
 service.write_text(ss)
 
 # Synchronize the native mirror on unread-count increases, decreases, and zero.

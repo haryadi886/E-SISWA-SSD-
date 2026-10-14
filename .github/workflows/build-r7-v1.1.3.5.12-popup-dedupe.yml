@@ -67,7 +67,11 @@ jobs:
           before, after = read("baseline-production.sha256"), read("candidate-production.sha256")
           changed = sorted(p for p in set(before) | set(after) if before.get(p) != after.get(p))
           print("Changed production source files:", changed)
-          allowed = {\n              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java",\n              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java",\n              "project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png",\n          }
+          allowed = {
+              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java",
+              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java",
+              "project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png",
+          }
           if set(changed) != allowed:
               raise SystemExit("Unexpected production source changes: " + repr(changed))
           PY

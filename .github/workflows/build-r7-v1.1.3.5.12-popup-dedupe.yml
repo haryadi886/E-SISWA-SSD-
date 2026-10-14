@@ -1,5 +1,5 @@
-name: Build E-SISWA R7 Android v1.1.3.5.13 Patch B Notification Recovery
-# Rebuild after wiring ic_stat_notification.xml to the verified MONO98 PNG.
+name: Build E-SISWA R7 Android v1.1.3.5.14 Patch B Direct MONO98 Notification Fix
+# Directly use verified MONO98 PNG as the small icon; avoid XML BitmapDrawable indirection.
 
 on:
   workflow_dispatch:
@@ -72,7 +72,7 @@ jobs:
               "project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java",
               "project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java",
               "project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png",
-              "project/app/src/main/res/drawable/ic_stat_notification.xml",
+              "project/app/src/main/AndroidManifest.xml",
           }
           if set(changed) != allowed:
               raise SystemExit("Unexpected production source changes: " + repr(changed))
@@ -114,34 +114,36 @@ jobs:
           unzip -t "$REL" >/dev/null
           unzip -t "$AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
-          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='23' versionName='1.1.3.5.13'" apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='24' versionName='1.1.3.5.14'" apk-badging.txt
           unzip -Z1 "$DBG" | grep -E "^res/drawable-nodpi(-v[0-9]+)?/esiswa_notification_monochrome\\.png$"
           unzip -p "$DBG" resources.arsc >/dev/null
-          grep -F 'android:src="@drawable/esiswa_notification_monochrome"' project/app/src/main/res/drawable/ic_stat_notification.xml
-          ! grep -F "android:pathData=" project/app/src/main/res/drawable/ic_stat_notification.xml
+          grep -F 'android:resource="@drawable/esiswa_notification_monochrome"' project/app/src/main/AndroidManifest.xml
+          ! grep -F 'android:resource="@drawable/ic_stat_notification"' project/app/src/main/AndroidManifest.xml
+          grep -F 'setSmallIcon(R.drawable.esiswa_notification_monochrome)' project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
+          ! grep -F 'setSmallIcon(R.drawable.ic_stat_notification)' project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
           grep -F "shouldSuppressDuplicatePopup(context, messageId)" project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
           grep -F "notificationPayload.getBody()" project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
-          cp "$DBG" E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-APK-UJI.apk
-          cp "$REL" E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-RELEASE-UNSIGNED.apk
-          cp "$AAB" E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-PLAY-UNSIGNED.aab
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-APK-UJI.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-PLAY-UNSIGNED.aab
           cd project
-          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
           cd ..
-          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-SOURCE.zip >/dev/null
-          sha256sum E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-APK-UJI.apk E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-SOURCE.zip | tee SHA256-v113513.txt
+          unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-SOURCE.zip >/dev/null
+          sha256sum E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-APK-UJI.apk E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-SOURCE.zip | tee SHA256-v113514.txt
 
       - name: Upload Patch B artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-BUILD
+          name: E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-BUILD
           path: |
-            E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-APK-UJI.apk
-            E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-RELEASE-UNSIGNED.apk
-            E-SISWA-R7-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-PLAY-UNSIGNED.aab
-            E-SISWA-R7-ANDROID-v1.1.3.5.13-PATCH-B-MONO98-NOTIFICATION-RECOVERY-SOURCE.zip
+            E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-APK-UJI.apk
+            E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-RELEASE-UNSIGNED.apk
+            E-SISWA-R7-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-PLAY-UNSIGNED.aab
+            E-SISWA-R7-ANDROID-v1.1.3.5.14-PATCH-B-DIRECT-MONO98-NOTIFICATION-FIX-SOURCE.zip
             apk-badging.txt
             debug-apk-signature.txt
-            SHA256-v113513.txt
+            SHA256-v113514.txt
           if-no-files-found: error
           retention-days: 30

@@ -220,6 +220,14 @@ checks = {
 }
 for name, ok in checks.items():
     print(("PASS" if ok else "FAIL") + " - " + name)
+main_source = (root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
+checks.update({
+    "exact MONO98 asset installed": asset_target.is_file() and hashlib.sha256(asset_target.read_bytes()).hexdigest() == "a7b402ce4add2c3be053d33037dbd3aecc3d59f097162305229d04259d50d161",
+    "dynamic unread count on mirrored notification": ".setNumber(Math.max(1, unreadCount))" in s,
+    "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,
+    "zero unread cancels mirrored notification": "nm.cancel(WEB_BADGE_NOTIFICATION_ID)" in s and "if (count == 0)" in main_source,
+    "decreasing unread count synchronizes mirror": "else if (count < previous)" in main_source,
+})
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
     raise SystemExit("Patch B checks failed: " + ", ".join(failed))

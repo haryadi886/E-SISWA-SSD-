@@ -48,7 +48,7 @@ jobs:
       - name: Syntax-check patch script
         run: python3 -m py_compile tools/apply_v113512_patch.py
 
-      - name: Apply Patch B + MONO98 + badge synchronization
+      - name: Apply Patch B + MONO98 + resilient badge synchronization
         run: python3 tools/apply_v113512_patch.py
 
       - name: Verify production source scope

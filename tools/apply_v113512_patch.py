@@ -181,7 +181,7 @@ replacement = r'''    private void handleMirroredWebNotification(String raw) {
                         count,
                         true
                 );
-            } else if (count < previous) {
+            } else if (count <= previous && count > 0) {
                 showMirroredWebNotification(
                         obj.optString("title", "(SSD) SMPN4D"),
                         obj.optString("body", "Ada " + count + " notifikasi baru yang belum dibaca."),
@@ -226,7 +226,7 @@ checks.update({
     "dynamic unread count on mirrored notification": ".setNumber(Math.max(1, unreadCount))" in s,
     "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,
     "zero unread cancels mirrored notification": "nm.cancel(WEB_BADGE_NOTIFICATION_ID)" in s and "if (count == 0)" in main_source,
-    "decreasing unread count synchronizes mirror": "else if (count < previous)" in main_source,
+    "decreasing or unchanged unread count synchronizes mirror": "else if (count <= previous && count > 0)" in main_source,
 })
 failed = [name for name, ok in checks.items() if not ok]
 if failed:

@@ -285,7 +285,7 @@ for name, ok in checks.items():
 main_source = (root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java").read_text()
 checks.update({
     "exact MONO98 asset installed": asset_target.is_file() and hashlib.sha256(asset_target.read_bytes()).hexdigest() == "a7b402ce4add2c3be053d33037dbd3aecc3d59f097162305229d04259d50d161",
-    "Notification.Builder points directly to MONO98 PNG": "R.drawable.esiswa_notification_monochrome" in s and "R.drawable.ic_stat_notification" not in s,
+    "Notification.Builder points directly to MONO98 PNG": s.count(".setSmallIcon(R.drawable.esiswa_notification_monochrome)") >= 2 and ".setSmallIcon(R.drawable.ic_stat_notification)" not in s,
     "FCM manifest icon points directly to MONO98 PNG": 'android:resource="@drawable/esiswa_notification_monochrome"' in manifest_path.read_text() and 'android:resource="@drawable/ic_stat_notification"' not in manifest_path.read_text(),
     "dynamic unread count on mirrored notification": ".setNumber(Math.max(1, unreadCount))" in s,
     "stable mirrored notification id": "nm.notify(WEB_BADGE_NOTIFICATION_ID, notification)" in s,

@@ -3,7 +3,7 @@ name: Build E-SISWA R7 Android v1.1.3.5.12 Patch B
 on:
   workflow_dispatch:
   push:
-    branches: [ feature/r7-v113512-popup-dedupe ]
+    branches: [ feature/r7-v113512-popup-dedupe, fix/r7-v113512-c15-mon98-badge-rc2-candidate ]
     paths:
       - '.github/workflows/build-r7-v1.1.3.5.12-popup-dedupe.yml'
 
@@ -64,7 +64,7 @@ jobs:
           before, after = read("baseline-production.sha256"), read("candidate-production.sha256")
           changed = sorted(p for p in set(before) | set(after) if before.get(p) != after.get(p))
           print("Changed production source files:", changed)
-          allowed = {"project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"}
+          allowed = {\n              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java",\n              "project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java",\n              "project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png",\n          }
           if set(changed) != allowed:
               raise SystemExit("Unexpected production source changes: " + repr(changed))
           PY
@@ -105,13 +105,13 @@ jobs:
           unzip -t "$REL" >/dev/null
           unzip -t "$AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DBG" | tee apk-badging.txt
-          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='22' versionName='1.1.3.5.12'" apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='22' versionName='1.1.3.5.12'" apk-badging.txt\n          unzip -Z1 "$DBG" | grep -E "^res/drawable-nodpi(-v[0-9]+)?/esiswa_notification_monochrome\\.png$"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DBG" | tee debug-apk-signature.txt
-          cp "$DBG" E-SISWA-R7-v1.1.3.5.12-PATCH-B-APK-UJI.apk
-          cp "$REL" E-SISWA-R7-v1.1.3.5.12-RELEASE-UNSIGNED.apk
-          cp "$AAB" E-SISWA-R7-v1.1.3.5.12-PLAY-UNSIGNED.aab
+          cp "$DBG" E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-APK-UJI.apk
+          cp "$REL" E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-RELEASE-UNSIGNED.apk
+          cp "$AAB" E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-PLAY-UNSIGNED.aab
           cd project
-          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          zip -qr ../E-SISWA-R7-ANDROID-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
           cd ..
           unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip >/dev/null
           sha256sum E-SISWA-R7-v1.1.3.5.12-PATCH-B-APK-UJI.apk E-SISWA-R7-v1.1.3.5.12-RELEASE-UNSIGNED.apk E-SISWA-R7-v1.1.3.5.12-PLAY-UNSIGNED.aab E-SISWA-R7-ANDROID-v1.1.3.5.12-SOURCE.zip | tee SHA256-v113512.txt
@@ -119,7 +119,7 @@ jobs:
       - name: Upload Patch B artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: E-SISWA-R7-v1.1.3.5.12-PATCH-B-BUILD
+          name: E-SISWA-R7-v1.1.3.5.12-PATCH-B-MONO98-BADGE-CANDIDATE-BUILD
           path: |
             E-SISWA-R7-v1.1.3.5.12-PATCH-B-APK-UJI.apk
             E-SISWA-R7-v1.1.3.5.12-RELEASE-UNSIGNED.apk

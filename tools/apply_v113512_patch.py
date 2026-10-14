@@ -93,7 +93,121 @@ methods = r'''    /** Suppress identical title/body popups for 10 minutes on thi
 s = s.replace(marker, methods + marker, 1)
 p.write_text(s)
 
-# Contract tests for Patch B and preservation of existing push behavior.
+# Install the exact, user-approved MONO98 asset in the built project.
+import base64
+import hashlib
+asset_b64 = Path("revision-assets/v113512/esiswa_notification_monochrome_98.png.b64").read_text().strip()
+asset_bytes = base64.b64decode(asset_b64, validate=True)
+asset_sha256 = hashlib.sha256(asset_bytes).hexdigest()
+assert asset_sha256 == "a7b402ce4add2c3be053d33037dbd3aecc3d59f097162305229d04259d50d161", "MONO98 asset hash mismatch"
+asset_target = root / "app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png"
+asset_target.parent.mkdir(parents=True, exist_ok=True)
+asset_target.write_bytes(asset_bytes)
+
+# Use one stable native notification for the in-app unread badge mirror.
+# The notification number tracks unread count; zero cancels the mirror so the
+# launcher badge can clear after the web Notification Center reports zero.
+service = root / "app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"
+ss = service.read_text()
+ss = ss.replace(
+    '    private static final String KEY_TOKEN = "fcm_token";',
+    '    private static final String KEY_TOKEN = "fcm_token";\n'
+    '    private static final int WEB_BADGE_NOTIFICATION_ID = 0x45534953;',
+    1,
+)
+method_marker = "    public static void storeToken(Context context, String token) {"
+assert method_marker in ss, "PushMessagingService insertion point missing"
+badge_method = r'''    public static void updateWebBadgeNotification(Context context, String title, String body,
+                                                  String kind, String view, int unreadCount,
+                                                  boolean alert) {
+        if (context == null) return;
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        if (unreadCount <= 0) {
+            nm.cancel(WEB_BADGE_NOTIFICATION_ID);
+            return;
+        }
+        ensureChannels(context);
+        if (Build.VERSION.SDK_INT >= 33
+                && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        String safeTitle = safe(title, "(SSD) SMPN4D");
+        String safeBody = safe(body, "Ada notifikasi baru yang belum dibaca.");
+        Intent open = new Intent(context, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("push_kind", safe(kind, "pembinaan_new"))
+                .putExtra("push_view", safe(view, "pembinaan"));
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                context, WEB_BADGE_NOTIFICATION_ID, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        Notification notification = new Notification.Builder(context, channelFor(kind))
+                .setSmallIcon(R.drawable.ic_stat_notification)
+                .setContentTitle(safeTitle)
+                .setContentText(safeBody)
+                .setStyle(new Notification.BigTextStyle().bigText(safeBody))
+                .setAutoCancel(true)
+                .setShowWhen(true)
+                .setNumber(Math.max(1, unreadCount))
+                .setOnlyAlertOnce(!alert)
+                .setContentIntent(contentIntent)
+                .build();
+        nm.notify(WEB_BADGE_NOTIFICATION_ID, notification);
+    }
+
+'''
+ss = ss.replace(method_marker, badge_method + method_marker, 1)
+service.write_text(ss)
+
+# Synchronize the native mirrored notification for both increases and decreases.
+main = root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java"
+ms = main.read_text()
+start = ms.index("    private void handleMirroredWebNotification(String raw) {")
+end = ms.index("    private static final class PrintRequestData", start)
+replacement = r'''    private void handleMirroredWebNotification(String raw) {
+        try {
+            JSONObject obj = new JSONObject(raw == null ? "{}" : raw);
+            int count = Math.max(0, obj.optInt("notifyCount", 0));
+            SharedPreferences prefs = getSharedPreferences(WEB_NOTIFICATION_PREFS, Context.MODE_PRIVATE);
+            int previous = Math.max(0, prefs.getInt(KEY_LAST_WEB_BADGE_COUNT, 0));
+            if (count == 0) {
+                PushMessagingService.updateWebBadgeNotification(
+                        this, "(SSD) SMPN4D", "", "pembinaan_new", "pembinaan", 0, false);
+            } else if (count > previous) {
+                showMirroredWebNotification(
+                        obj.optString("title", "(SSD) SMPN4D"),
+                        obj.optString("body", "Ada " + count + " notifikasi baru yang belum dibaca."),
+                        obj.optString("kind", "pembinaan_new"),
+                        obj.optString("view", "pembinaan"),
+                        count,
+                        true
+                );
+            } else if (count < previous) {
+                showMirroredWebNotification(
+                        obj.optString("title", "(SSD) SMPN4D"),
+                        obj.optString("body", "Ada " + count + " notifikasi baru yang belum dibaca."),
+                        obj.optString("kind", "pembinaan_new"),
+                        obj.optString("view", "pembinaan"),
+                        count,
+                        false
+                );
+            }
+            prefs.edit().putInt(KEY_LAST_WEB_BADGE_COUNT, count).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private void showMirroredWebNotification(String title, String body, String kind, String view,
+                                             int count, boolean alert) {
+        PushMessagingService.updateWebBadgeNotification(this, title, body, kind, view, count, alert);
+    }
+
+'''
+ms = ms.slice(0,start) + replacement + ms.slice(end);
+main.write_text(ms);
+
+# Contract tests for Patch B, MONO98 installation and unread-count convergence.
+''
 s = p.read_text()
 checks = {
     "10-minute window": "10L * 60L * 1000L" in s,

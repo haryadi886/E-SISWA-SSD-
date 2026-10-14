@@ -1,5 +1,5 @@
 name: Build E-SISWA R7 Android v1.1.3.5.14 Patch B Direct MONO98 Notification Fix
-# Directly use verified MONO98 PNG as the small icon; avoid XML BitmapDrawable indirection.
+# Build contract v2: direct MONO98 PNG small icon, payload fallback, ID-based dedupe.
 
 on:
   workflow_dispatch:

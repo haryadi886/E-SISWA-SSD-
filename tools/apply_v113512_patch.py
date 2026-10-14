@@ -104,9 +104,7 @@ asset_target = root / "app/src/main/res/drawable-nodpi/esiswa_notification_monoc
 asset_target.parent.mkdir(parents=True, exist_ok=True)
 asset_target.write_bytes(asset_bytes)
 
-# Use one stable native notification for the in-app unread badge mirror.
-# The notification number tracks unread count; zero cancels the mirror so the
-# launcher badge can clear after the web Notification Center reports zero.
+# Add a stable native notification for the web unread-count mirror.
 service = root / "app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java"
 ss = service.read_text()
 ss = ss.replace(
@@ -160,7 +158,7 @@ badge_method = r'''    public static void updateWebBadgeNotification(Context con
 ss = ss.replace(method_marker, badge_method + method_marker, 1)
 service.write_text(ss)
 
-# Synchronize the native mirrored notification for both increases and decreases.
+# Synchronize the native mirror on unread-count increases, decreases, and zero.
 main = root / "app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java"
 ms = main.read_text()
 start = ms.index("    private void handleMirroredWebNotification(String raw) {")
@@ -203,8 +201,8 @@ replacement = r'''    private void handleMirroredWebNotification(String raw) {
     }
 
 '''
-ms = ms.slice(0,start) + replacement + ms.slice(end);
-main.write_text(ms);
+ms = ms[:start] + replacement + ms[end:]
+main.write_text(ms)
 
 # Contract tests for Patch B, MONO98 installation and unread-count convergence.
 ''

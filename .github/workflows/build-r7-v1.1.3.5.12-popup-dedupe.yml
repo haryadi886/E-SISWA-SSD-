@@ -49,7 +49,7 @@ jobs:
       - name: Syntax-check patch script
         run: python3 -m py_compile tools/apply_v113512_patch.py
 
-      - name: Apply Patch B + MONO98 + Notification Center-first routing
+      - name: Apply Patch B + direct MONO98 PNG + notification recovery checks
         run: python3 tools/apply_v113512_patch.py
 
       - name: Verify production source scope

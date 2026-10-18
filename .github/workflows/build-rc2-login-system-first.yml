@@ -1,0 +1,178 @@
+name: Build E-SISWA R7 RC.2 Login-System-First APK
+
+on:
+  push:
+    branches:
+      - 'build/rc2-login-system-first'
+    paths:
+      - '.github/workflows/build-rc2-login-system-first.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout isolated candidate branch
+        uses: actions/checkout@v4
+
+      - name: Download verified v1.1.3.5.17 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: E-SISWA-R7-v1.1.3.5.17-C1.5.3.2-R6-APK-UJI
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: haryadi886/E-SISWA-SSD-
+          run-id: 39098597752
+
+      - name: Apply isolated Login-System-first candidate delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$(find base-artifact -type f -name 'E-SISWA-R7-ANDROID-v1.1.3.5.17-C1.5.3.2-R6-NATIVE-SHELL-SOURCE.zip' -print -quit)"
+          test -n "$SRC" && test -s "$SRC"
+          unzip -t "$SRC" >/dev/null
+          mkdir project
+          unzip -q "$SRC" -d project
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          gradle = Path('project/app/build.gradle')
+          s = gradle.read_text()
+          assert s.count('versionCode 27') == 1, 'Expected v1.1.3.5.17 versionCode'
+          assert s.count("versionName '1.1.3.5.17'") == 1, 'Expected v1.1.3.5.17 versionName'
+          s = s.replace('versionCode 27', 'versionCode 28', 1)
+          s = s.replace("versionName '1.1.3.5.17'", "versionName 'RC.2'", 1)
+          gradle.write_text(s)
+
+          java = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
+          s = java.read_text()
+          old_url = 'https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbyakrD5CIbaeZm7GH3jwn2ZGrpA_DBq6HYkOqLUaNI-g18L4GBzMctYVSYM7f9O7ZCzkQ/exec'
+          new_url = old_url + '?page=login'
+          assert s.count(old_url) == 1, 'Expected verified v1.1.3.5.17 deployment URL exactly once'
+          s = s.replace(old_url, new_url, 1)
+          assert "view:'notification_center'" in s, 'Notification Center routing baseline missing'
+          java.write_text(s)
+
+          # Native startup correction: force Login Sistem over the runtime's delayed Album Alumni default.
+          java = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
+          s = java.read_text()
+          hook = 'if (view == webView) {\n                deliverCachedFcmTokenToPage();'
+          assert s.count(hook) == 1, 'Expected main WebView page-finished hook not found exactly once'
+          s = s.replace(hook, 'if (view == webView) {\n                enforceLoginSystemFirst(view);\n                deliverCachedFcmTokenToPage();', 1)
+          anchor = '    private class ESiswaChromeClient extends WebChromeClient {'
+          method = r'''    // vRC.2: override the web runtime's delayed Album Alumni default at startup.
+              private void enforceLoginSystemFirst(WebView target) {
+                  if (target == null) return;
+                  String js = "(function(){try{if(window.__esiswaLoginFirstDone||window.__esiswaLoginFirstTimer)return;"
+                          + "var n=0;function f(){n++;try{if(typeof window.switchLandingTabR5345==='function'&&document.getElementById('loginSystemPanelR5345')){"
+                          + "window.switchLandingTabR5345('login');var p=document.getElementById('loginSystemPanelR5345');var a=document.getElementById('albumAlumniPanelR5345');"
+                          + "if(p&&!p.classList.contains('hidden')&&(!a||a.classList.contains('hidden'))){window.__esiswaLoginFirstDone=true;clearInterval(window.__esiswaLoginFirstTimer);window.__esiswaLoginFirstTimer=null;return;}}}catch(e){}"
+                          + "if(n>=40){clearInterval(window.__esiswaLoginFirstTimer);window.__esiswaLoginFirstTimer=null;}}window.__esiswaLoginFirstTimer=setInterval(f,100);f();}catch(e){}})();";
+                  target.evaluateJavascript(js, null);
+              }
+          
+          '''
+          assert s.count(anchor) == 1, 'Expected ChromeClient insertion point not found exactly once'
+          s = s.replace(anchor, method + anchor, 1)
+          java.write_text(s)
+          assert 'enforceLoginSystemFirst(view);' in s
+          assert 'switchLandingTabR5345' in s
+
+          service = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java').read_text()
+          manifest = Path('project/app/src/main/AndroidManifest.xml').read_text()
+          icon = Path('project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png')
+          assert 'setSmallIcon(R.drawable.esiswa_notification_monochrome)' in service
+          assert 'android:resource="@drawable/esiswa_notification_monochrome"' in manifest
+          assert icon.is_file() and icon.stat().st_size > 0
+          assert new_url in java.read_text()
+          print('PASS: version RC.2 / code 29')
+          print('PASS: native Login-System-first enforcement added')
+          print('PASS: notification routing and monochrome icon preserved')
+          print('MainActivity SHA-256:', hashlib.sha256(java.read_bytes()).hexdigest())
+          PY
+
+      - name: Verify source contract and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "applicationId 'id.sch.smpn4dumai.esiswa'" project/app/build.gradle
+          grep -F 'versionCode 28' project/app/build.gradle
+          grep -F "versionName 'RC.2'" project/app/build.gradle
+          grep -F 'enforceLoginSystemFirst(view);' project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F 'switchLandingTabR5345' project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F "view:'notification_center'" project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java
+          grep -F 'setSmallIcon(R.drawable.esiswa_notification_monochrome)' project/app/src/main/java/id/sch/smpn4dumai/esiswa/PushMessagingService.java
+          grep -F 'android:resource="@drawable/esiswa_notification_monochrome"' project/app/src/main/AndroidManifest.xml
+          test -s project/app/src/main/res/drawable-nodpi/esiswa_notification_monochrome.png
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('project/app/src/main/AndroidManifest.xml')
+          print('PASS: Android manifest XML parses')
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$S" ]; then S="$(command -v sdkmanager)"; fi
+          yes | "$S" --licenses >/dev/null || true
+          "$S" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Compile APK
+        working-directory: project
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Audit APK identity, integrity and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=project/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep "package: name='id.sch.smpn4dumai.esiswa' versionCode='28' versionName='RC.2'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+          cp "$APK" E-SISWA-R7-vRC.2-RC2-LOGIN-SYSTEM-FIRST-APK-UJI.apk
+          cd project
+          zip -qr ../E-SISWA-R7-ANDROID-vRC.2-RC2-LOGIN-SYSTEM-FIRST-SOURCE.zip . -x 'app/build/*' 'build/*' '.gradle/*'
+          cd ..
+          unzip -t E-SISWA-R7-ANDROID-vRC.2-RC2-LOGIN-SYSTEM-FIRST-SOURCE.zip >/dev/null
+          sha256sum E-SISWA-R7-ANDROID-vRC.2-RC2-LOGIN-SYSTEM-FIRST-SOURCE.zip | tee source-sha256.txt
+          printf '%s\n' 'Base: v1.1.3.5.17 C1.5.3.2 R6 native shell.' > RC2-LOGIN-SYSTEM-FIRST-NOTES.txt
+          printf '%s\n' 'Native WebView repeatedly selects Login Sistem until the login panel is active, overriding the web runtime delayed Album Alumni tab. On-device verification is still required.' >> RC2-LOGIN-SYSTEM-FIRST-NOTES.txt
+
+      - name: Upload candidate APK and source artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-SISWA-R7-vRC.2-RC2-LOGIN-SYSTEM-FIRST-APK-UJI
+          path: |
+            E-SISWA-R7-vRC.2-RC2-LOGIN-SYSTEM-FIRST-APK-UJI.apk
+            apk-badging.txt
+            apk-signature.txt
+            apk-sha256.txt
+            E-SISWA-R7-ANDROID-vRC.2-RC2-LOGIN-SYSTEM-FIRST-SOURCE.zip
+            source-sha256.txt
+            RC2-LOGIN-SYSTEM-FIRST-NOTES.txt
+          if-no-files-found: error
+          retention-days: 30

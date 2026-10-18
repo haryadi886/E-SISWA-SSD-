@@ -160,7 +160,7 @@ jobs:
           unzip -t E-SISWA-R7-ANDROID-v1.1.3.5.19-LOGIN-FIRST-NATIVE-FIX-SOURCE.zip >/dev/null
           sha256sum E-SISWA-R7-ANDROID-v1.1.3.5.19-LOGIN-FIRST-NATIVE-FIX-SOURCE.zip | tee source-sha256.txt
           printf '%s\n' 'Base: v1.1.3.5.17 C1.5.3.2 R6 native shell.' > LOGIN-FIRST-NATIVE-FIX-NOTES.txt
-          printf '%s\n' 'Native WebView repeatedly selects Login Sistem until the login panel is active, overriding the web runtime's delayed Album Alumni tab. On-device verification is still required.' >> LOGIN-FIRST-NATIVE-FIX-NOTES.txt
+          printf '%s\n' 'Native WebView repeatedly selects Login Sistem until the login panel is active, overriding the web runtime delayed Album Alumni tab. On-device verification is still required.' >> LOGIN-FIRST-NATIVE-FIX-NOTES.txt
 
       - name: Upload candidate APK and source artifacts
         uses: actions/upload-artifact@v4

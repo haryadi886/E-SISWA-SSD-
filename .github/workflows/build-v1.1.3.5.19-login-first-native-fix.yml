@@ -79,7 +79,7 @@ jobs:
                   target.evaluateJavascript(js, null);
               }
           
-'''
+          '''
           assert s.count(anchor) == 1, 'Expected ChromeClient insertion point not found exactly once'
           s = s.replace(anchor, method + anchor, 1)
           java.write_text(s)

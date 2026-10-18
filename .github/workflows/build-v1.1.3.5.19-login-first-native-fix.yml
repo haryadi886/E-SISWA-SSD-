@@ -46,10 +46,10 @@ jobs:
           import hashlib
           gradle = Path('project/app/build.gradle')
           s = gradle.read_text()
-          assert s.count('versionCode 29') == 1, 'Expected v1.1.3.5.17 versionCode'
-          assert s.count("versionName '1.1.3.5.19'") == 1, 'Expected v1.1.3.5.17 versionName'
-          s = s.replace('versionCode 29', 'versionCode 29', 1)
-          s = s.replace("versionName '1.1.3.5.19'", "versionName '1.1.3.5.19'", 1)
+          assert s.count('versionCode 27') == 1, 'Expected v1.1.3.5.17 versionCode'
+          assert s.count("versionName '1.1.3.5.17'") == 1, 'Expected v1.1.3.5.17 versionName'
+          s = s.replace('versionCode 27', 'versionCode 29', 1)
+          s = s.replace("versionName '1.1.3.5.17'", "versionName '1.1.3.5.19'", 1)
           gradle.write_text(s)
 
           java = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
@@ -66,7 +66,7 @@ jobs:
           s = java.read_text()
           hook = '                deliverCachedFcmTokenToPage();'
           assert s.count(hook) == 1, 'Expected main WebView page-finished hook not found exactly once'
-          s = s.replace(hook, '                enforceLoginSystemFirst(view);\\n' + hook, 1)
+          s = s.replace(hook, '                enforceLoginSystemFirst(view);\n' + hook, 1)
           anchor = '    private class ESiswaChromeClient extends WebChromeClient {'
           method = r'''    // v1.1.3.5.19: override the web runtime's delayed Album Alumni default at startup.
               private void enforceLoginSystemFirst(WebView target) {

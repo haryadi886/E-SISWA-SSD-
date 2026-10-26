@@ -55,7 +55,7 @@ jobs:
           java = Path('project/app/src/main/java/id/sch/smpn4dumai/esiswa/MainActivity.java')
           s = java.read_text()
           old_url = 'https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbyakrD5CIbaeZm7GH3jwn2ZGrpA_DBq6HYkOqLUaNI-g18L4GBzMctYVSYM7f9O7ZCzkQ/exec'
-          new_url = old_url + '?page=login'
+          new_url = 'https://script.google.com/a/macros/guru.smp.belajar.id/s/AKfycbyBy0SGP9IBl_lm1-7AICQoCP3kFZGdKsShYCcVoxRC_9thKJ88H9U9Q-qJ8c0nj74ExQ/exec?page=login'
           assert s.count(old_url) == 1, 'Expected verified v1.1.3.5.17 deployment URL exactly once'
           s = s.replace(old_url, new_url, 1)
           assert "view:'notification_center'" in s, 'Notification Center routing baseline missing'
@@ -93,7 +93,7 @@ jobs:
           assert 'android:resource="@drawable/esiswa_notification_monochrome"' in manifest
           assert icon.is_file() and icon.stat().st_size > 0
           assert new_url in java.read_text()
-          print('PASS: version RC.2 / code 29')
+          print('PASS: version RC.2 / code 28')
           print('PASS: native Login-System-first enforcement added')
           print('PASS: notification routing and monochrome icon preserved')
           print('MainActivity SHA-256:', hashlib.sha256(java.read_bytes()).hexdigest())
